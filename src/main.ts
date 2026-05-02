@@ -1,6 +1,7 @@
 import { getAccountId, getDeviceId, setAccountId, clearAccount, getSessionId } from './lib/storage'
 import { fetchState, generateUUID } from './lib/api'
 import { Player, getEpisodes, addEpisode, Episode } from './lib/player'
+import { parseFeed } from './lib/rss'
 
 let player: Player
 
@@ -32,6 +33,10 @@ async function initApp() {
     showNoAccount()
   }
 
+  initTabs()
+  initAddEpisodeForm()
+  initFeedImport()
+
   document.getElementById('create-account-btn')?.addEventListener('click', async () => {
     const newAccountId = generateUUID()
     setAccountId(newAccountId)
@@ -62,9 +67,10 @@ async function initApp() {
     const currentId = player?.getCurrentEpisodeId()
     if (!currentId) return
 
-    const idx = EPISODES.findIndex((e) => e.id === currentId)
+    const episodes = getEpisodes()
+    const idx = episodes.findIndex((e) => e.id === currentId)
     if (idx > 0) {
-      player?.playEpisode(EPISODES[idx - 1].id)
+      player?.playEpisode(episodes[idx - 1].id)
     }
   })
 
@@ -72,9 +78,10 @@ async function initApp() {
     const currentId = player?.getCurrentEpisodeId()
     if (!currentId) return
 
-    const idx = EPISODES.findIndex((e) => e.id === currentId)
-    if (idx < EPISODES.length - 1) {
-      player?.playEpisode(EPISODES[idx + 1].id)
+    const episodes = getEpisodes()
+    const idx = episodes.findIndex((e) => e.id === currentId)
+    if (idx < episodes.length - 1) {
+      player?.playEpisode(episodes[idx + 1].id)
     }
   })
 
@@ -183,6 +190,58 @@ function initAddEpisodeForm() {
     titleInput.value = ''
     urlInput.value = ''
     durationInput.value = ''
+  })
+}
+
+function initTabs() {
+  const tabSingle = document.getElementById('tab-single')
+  const tabFeed = document.getElementById('tab-feed')
+  const formSingle = document.getElementById('add-episode-form')
+  const formFeed = document.getElementById('import-feed-form')
+
+  tabSingle?.addEventListener('click', () => {
+    tabSingle.classList.add('active')
+    tabFeed?.classList.remove('active')
+    formSingle?.classList.remove('hidden')
+    formFeed?.classList.add('hidden')
+  })
+
+  tabFeed?.addEventListener('click', () => {
+    tabFeed.classList.add('active')
+    tabSingle?.classList.remove('active')
+    formFeed?.classList.remove('hidden')
+    formSingle?.classList.add('hidden')
+  })
+}
+
+function initFeedImport() {
+  const btn = document.getElementById('import-feed-btn')
+  const status = document.getElementById('import-status')
+
+  btn?.addEventListener('click', async () => {
+    const urlInput = document.getElementById('feed-url') as HTMLInputElement
+    const url = urlInput.value.trim()
+
+    if (!url) {
+      status!.textContent = 'Please enter a feed URL'
+      return
+    }
+
+    status!.textContent = 'Fetching feed...'
+
+    try {
+      const feed = await parseFeed(url)
+      let count = 0
+      for (const ep of feed.episodes) {
+        addEpisode(ep)
+        count++
+      }
+      renderEpisodes()
+      status!.textContent = `Imported ${count} episodes from "${feed.title}"`
+      urlInput.value = ''
+    } catch (e) {
+      status!.textContent = `Error: ${e instanceof Error ? e.message : 'Failed to parse feed'}`
+    }
   })
 }
 

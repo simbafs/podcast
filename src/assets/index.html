@@ -31,11 +31,22 @@
       </section>
 
       <section class="player-section">
+        <div class="tabs">
+          <button id="tab-single" class="tab-btn active">Single Episode</button>
+          <button id="tab-feed" class="tab-btn">Import RSS Feed</button>
+        </div>
+
         <div id="add-episode-form" class="add-episode-form">
           <input type="text" id="episode-title" placeholder="Episode title" class="input">
           <input type="text" id="episode-url" placeholder="Audio URL (mp3)" class="input">
           <input type="number" id="episode-duration" placeholder="Duration (seconds)" class="input">
           <button id="add-episode-btn" class="btn btn-primary">Add Episode</button>
+        </div>
+
+        <div id="import-feed-form" class="add-episode-form hidden">
+          <input type="text" id="feed-url" placeholder="RSS Feed URL" class="input">
+          <button id="import-feed-btn" class="btn btn-primary">Import Feed</button>
+          <p id="import-status" class="import-status"></p>
         </div>
 
         <div class="episode-list" id="episode-list"></div>

@@ -84,9 +84,12 @@
   }
 
   // src/lib/player.ts
-  var EPISODES2 = [];
+  var EPISODES = [];
   function getEpisodes() {
-    return EPISODES2;
+    return EPISODES;
+  }
+  function addEpisode(episode) {
+    EPISODES.push(episode);
   }
   var SYNC_INTERVAL = 12e4;
   var SEEK_DEBOUNCE = 5e3;
@@ -113,7 +116,7 @@
       try {
         const state = await fetchState(accountId);
         if (state.account?.activeEpisodeId) {
-          const episode = EPISODES2.find((e) => e.id === state.account.activeEpisodeId);
+          const episode = EPISODES.find((e) => e.id === state.account.activeEpisodeId);
           if (episode) {
             this.currentEpisodeId = episode.id;
             this.audio.src = episode.audioUrl;
@@ -128,7 +131,7 @@
     async playEpisode(episodeId) {
       const accountId = getAccountId();
       if (!accountId) return;
-      const episode = EPISODES2.find((e) => e.id === episodeId);
+      const episode = EPISODES.find((e) => e.id === episodeId);
       if (!episode) return;
       const wasPlaying = this.isPlaying;
       if (this.currentEpisodeId && this.currentEpisodeId !== episodeId) {
@@ -153,8 +156,8 @@
       if (!accountId) return;
       const sessionId = getSessionId();
       const deviceId = getDeviceId();
-      const fromEpisode = EPISODES2.find((e) => e.id === this.currentEpisodeId);
-      const toEpisode = EPISODES2.find((e) => e.id === newEpisodeId);
+      const fromEpisode = EPISODES.find((e) => e.id === this.currentEpisodeId);
+      const toEpisode = EPISODES.find((e) => e.id === newEpisodeId);
       if (!fromEpisode || !toEpisode) return;
       try {
         await transition({
@@ -310,7 +313,7 @@
     }
     updateUI() {
       if (!this.currentEpisodeId) return;
-      const episode = EPISODES2.find((e) => e.id === this.currentEpisodeId);
+      const episode = EPISODES.find((e) => e.id === this.currentEpisodeId);
       if (!episode) return;
       document.getElementById("now-playing-title").textContent = episode.title;
       document.getElementById("now-playing-episode").textContent = `Episode ${episode.id.replace("ep", "")}`;
@@ -355,6 +358,60 @@
     }
   };
 
+  // src/lib/rss.ts
+  async function parseFeed(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch feed: ${response.status}`);
+    }
+    const text = await response.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, "application/xml");
+    const parseError = doc.querySelector("parsererror");
+    if (parseError) {
+      throw new Error("Invalid XML format");
+    }
+    const channel = doc.querySelector("channel");
+    if (!channel) {
+      throw new Error("No channel found in feed");
+    }
+    const title = channel.querySelector("title")?.textContent || "Unknown Podcast";
+    const description = channel.querySelector("description")?.textContent || "";
+    const imageEl = channel.querySelector("image > url") || channel.querySelector("image[href]");
+    const imageUrl = imageEl?.getAttribute("href") || imageEl?.textContent || "";
+    const items = channel.querySelectorAll("item");
+    const episodes = [];
+    for (const item of items) {
+      const epTitle = item.querySelector("title")?.textContent || "Untitled";
+      const epUrl = item.querySelector("enclosure")?.getAttribute("url") || "";
+      let duration = 0;
+      const durationStr = item.querySelector("itunes\\:duration, duration")?.textContent;
+      if (durationStr) {
+        duration = parseDuration(durationStr);
+      }
+      if (epUrl) {
+        episodes.push({
+          id: generateUUID2(),
+          title: epTitle,
+          audioUrl: epUrl,
+          duration
+        });
+      }
+    }
+    return { title, description, imageUrl, episodes };
+  }
+  function parseDuration(str) {
+    const parts = str.split(":").map(Number);
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    } else if (parts.length === 1) {
+      return parts[0];
+    }
+    return 0;
+  }
+
   // src/main.ts
   var player;
   function generateShareLink(accountId) {
@@ -379,6 +436,9 @@
     } else {
       showNoAccount();
     }
+    initTabs();
+    initAddEpisodeForm();
+    initFeedImport();
     document.getElementById("create-account-btn")?.addEventListener("click", async () => {
       const newAccountId = generateUUID2();
       setAccountId(newAccountId);
@@ -405,17 +465,19 @@
     document.getElementById("prev-btn")?.addEventListener("click", () => {
       const currentId = player?.getCurrentEpisodeId();
       if (!currentId) return;
-      const idx = EPISODES.findIndex((e) => e.id === currentId);
+      const episodes = getEpisodes();
+      const idx = episodes.findIndex((e) => e.id === currentId);
       if (idx > 0) {
-        player?.playEpisode(EPISODES[idx - 1].id);
+        player?.playEpisode(episodes[idx - 1].id);
       }
     });
     document.getElementById("next-btn")?.addEventListener("click", () => {
       const currentId = player?.getCurrentEpisodeId();
       if (!currentId) return;
-      const idx = EPISODES.findIndex((e) => e.id === currentId);
-      if (idx < EPISODES.length - 1) {
-        player?.playEpisode(EPISODES[idx + 1].id);
+      const episodes = getEpisodes();
+      const idx = episodes.findIndex((e) => e.id === currentId);
+      if (idx < episodes.length - 1) {
+        player?.playEpisode(episodes[idx + 1].id);
       }
     });
     document.querySelectorAll(".episode-item").forEach((el) => {
@@ -482,6 +544,76 @@
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  }
+  function initAddEpisodeForm() {
+    const btn = document.getElementById("add-episode-btn");
+    btn?.addEventListener("click", () => {
+      const titleInput = document.getElementById("episode-title");
+      const urlInput = document.getElementById("episode-url");
+      const durationInput = document.getElementById("episode-duration");
+      const title = titleInput.value.trim();
+      const url = urlInput.value.trim();
+      const duration = parseInt(durationInput.value, 10);
+      if (!title || !url || isNaN(duration)) {
+        alert("Please fill in all fields");
+        return;
+      }
+      const episode = {
+        id: generateUUID2(),
+        title,
+        audioUrl: url,
+        duration
+      };
+      addEpisode(episode);
+      renderEpisodes();
+      titleInput.value = "";
+      urlInput.value = "";
+      durationInput.value = "";
+    });
+  }
+  function initTabs() {
+    const tabSingle = document.getElementById("tab-single");
+    const tabFeed = document.getElementById("tab-feed");
+    const formSingle = document.getElementById("add-episode-form");
+    const formFeed = document.getElementById("import-feed-form");
+    tabSingle?.addEventListener("click", () => {
+      tabSingle.classList.add("active");
+      tabFeed?.classList.remove("active");
+      formSingle?.classList.remove("hidden");
+      formFeed?.classList.add("hidden");
+    });
+    tabFeed?.addEventListener("click", () => {
+      tabFeed.classList.add("active");
+      tabSingle?.classList.remove("active");
+      formFeed?.classList.remove("hidden");
+      formSingle?.classList.add("hidden");
+    });
+  }
+  function initFeedImport() {
+    const btn = document.getElementById("import-feed-btn");
+    const status = document.getElementById("import-status");
+    btn?.addEventListener("click", async () => {
+      const urlInput = document.getElementById("feed-url");
+      const url = urlInput.value.trim();
+      if (!url) {
+        status.textContent = "Please enter a feed URL";
+        return;
+      }
+      status.textContent = "Fetching feed...";
+      try {
+        const feed = await parseFeed(url);
+        let count = 0;
+        for (const ep of feed.episodes) {
+          addEpisode(ep);
+          count++;
+        }
+        renderEpisodes();
+        status.textContent = `Imported ${count} episodes from "${feed.title}"`;
+        urlInput.value = "";
+      } catch (e) {
+        status.textContent = `Error: ${e instanceof Error ? e.message : "Failed to parse feed"}`;
+      }
+    });
   }
   async function initPlayer(accountId) {
     const audio = document.getElementById("audio-player");
