@@ -1,7 +1,7 @@
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
-// .wrangler/tmp/bundle-JYFvgD/strip-cf-connecting-ip-header.js
+// .wrangler/tmp/bundle-VIBr9m/strip-cf-connecting-ip-header.js
 function stripCfConnectingIPHeader(input, init) {
   const request = new Request(input, init);
   request.headers.delete("CF-Connecting-IP");
@@ -2082,6 +2082,44 @@ function createApp() {
     const data = await res.json();
     return c.json(data);
   });
+  app.post("/api/progress", async (c) => {
+    const body = await c.req.json();
+    if (!body.accountId) {
+      return c.json({ error: "accountId required" }, 400);
+    }
+    const stub = getDO(c.env, body.accountId);
+    const req = new Request(`http://localhost/do/progress?accountId=${encodeURIComponent(body.accountId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const res = await stub.fetch(req);
+    if (res.status === 409) {
+      const conflict = await res.json();
+      return c.json(conflict, 409);
+    }
+    const data = await res.json();
+    return c.json(data);
+  });
+  app.post("/api/progress", async (c) => {
+    const body = await c.req.json();
+    if (!body.accountId) {
+      return c.json({ error: "accountId required" }, 400);
+    }
+    const stub = getDO(c.env, body.accountId);
+    const req = new Request(`http://localhost/do/progress?accountId=${encodeURIComponent(body.accountId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const res = await stub.fetch(req);
+    if (res.status === 409) {
+      const conflict = await res.json();
+      return c.json(conflict, 409);
+    }
+    const data = await res.json();
+    return c.json(data);
+  });
   app.post("/api/playback/transition", async (c) => {
     const body = await c.req.json();
     if (!body.accountId) {
@@ -2462,7 +2500,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-JYFvgD/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-VIBr9m/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -2494,7 +2532,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-JYFvgD/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-VIBr9m/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

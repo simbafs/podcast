@@ -62,6 +62,74 @@ export function createApp() {
     return c.json(data)
   })
 
+  app.post('/api/progress', async (c) => {
+    const body = await c.req.json<{
+      accountId: string
+      sessionId: string
+      deviceId: string
+      episodeId: string
+      positionSec: number
+      durationSec?: number
+      state: 'playing' | 'paused' | 'ended'
+      takeover?: boolean
+    }>()
+
+    if (!body.accountId) {
+      return c.json({ error: 'accountId required' }, 400)
+    }
+
+    const stub = getDO(c.env, body.accountId)
+    const req = new Request(`http://localhost/do/progress?accountId=${encodeURIComponent(body.accountId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    const res = await stub.fetch(req)
+
+    if (res.status === 409) {
+      const conflict = await res.json()
+      return c.json(conflict, 409)
+    }
+
+    const data = await res.json()
+    return c.json(data)
+  })
+
+  app.post('/api/progress', async (c) => {
+    const body = await c.req.json<{
+      accountId: string
+      sessionId: string
+      deviceId: string
+      episodeId: string
+      positionSec: number
+      durationSec?: number
+      state: 'playing' | 'paused' | 'ended'
+      takeover?: boolean
+    }>()
+
+    if (!body.accountId) {
+      return c.json({ error: 'accountId required' }, 400)
+    }
+
+    const stub = getDO(c.env, body.accountId)
+    const req = new Request(`http://localhost/do/progress?accountId=${encodeURIComponent(body.accountId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    const res = await stub.fetch(req)
+
+    if (res.status === 409) {
+      const conflict = await res.json()
+      return c.json(conflict, 409)
+    }
+
+    const data = await res.json()
+    return c.json(data)
+  })
+
   app.post('/api/playback/transition', async (c) => {
     const body = await c.req.json<{
       accountId: string
