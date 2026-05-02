@@ -326,28 +326,29 @@ export class ProgressDO extends DurableObject {
   private async persist() {
     if (!this.account) return
 
-    const accountId = this.getAccountId()
-    if (!accountId) return
+    try {
+      const accountId = this.getAccountId()
+      if (!accountId) return
 
-    await this.env.DB.prepare(
-      `INSERT INTO accounts (id, active_session_id, active_device_id, active_episode_id, lease_until, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         active_session_id = excluded.active_session_id,
-         active_device_id = excluded.active_device_id,
-         active_episode_id = excluded.active_episode_id,
-         lease_until = excluded.lease_until,
-         updated_at = excluded.updated_at`
-    ).bind(
-      accountId,
-      this.account.activeSessionId,
-      this.account.activeDeviceId,
-      this.account.activeEpisodeId,
-      this.account.leaseUntil,
-      Date.now()
-    ).run()
+      await this.env.DB.prepare(
+        `INSERT INTO accounts (id, active_session_id, active_device_id, active_episode_id, lease_until, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           active_session_id = excluded.active_session_id,
+           active_device_id = excluded.active_device_id,
+           active_episode_id = excluded.active_episode_id,
+           lease_until = excluded.lease_until,
+           updated_at = excluded.updated_at`
+      ).bind(
+        accountId,
+        this.account.activeSessionId,
+        this.account.activeDeviceId,
+        this.account.activeEpisodeId,
+        this.account.leaseUntil,
+        Date.now()
+      ).run()
 
-    for (const [_, p] of this.progress) {
+      for (const [_, p] of this.progress) {
       await this.env.DB.prepare(
         `INSERT INTO episode_progress (account_id, episode_id, position_sec, duration_sec, state, last_session_id, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -366,6 +367,9 @@ export class ProgressDO extends DurableObject {
         p.lastSessionId,
         p.updatedAt
       ).run()
+      }
+    } catch {
+      // D1 not available in local dev, use in-memory state
     }
   }
 
