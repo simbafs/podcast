@@ -118,6 +118,7 @@ export interface Episode {
   title: string
   audioUrl: string
   duration: number
+  pubDate?: number
 }
 
 export async function fetchEpisodes(accountId: string): Promise<{ episodes: Episode[] }> {

@@ -46,15 +46,24 @@ export async function parseFeed(url: string): Promise<ParsedPodcast> {
       duration = parseDuration(durationStr)
     }
 
+    let pubDate: number | undefined
+    const pubDateStr = item.querySelector('pubDate')?.textContent
+    if (pubDateStr) {
+      pubDate = new Date(pubDateStr).getTime()
+    }
+
     if (epUrl) {
       episodes.push({
         id: generateUUID(),
         title: epTitle,
         audioUrl: epUrl,
         duration,
+        pubDate,
       })
     }
   }
+
+  episodes.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0))
 
   return { title, description, imageUrl, episodes }
 }

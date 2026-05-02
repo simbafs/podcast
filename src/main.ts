@@ -84,9 +84,7 @@ async function initApp() {
     showNoAccount()
   }
 
-  initTabs()
-  initAddEpisodeForm()
-  initFeedImport()
+  initSidebar()
 
   document.getElementById('create-account-btn')?.addEventListener('click', async () => {
     const newAccountId = generateUUID()
@@ -204,12 +202,71 @@ function formatDuration(seconds: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
 }
 
-function initAddEpisodeForm() {
-  const btn = document.getElementById('add-episode-btn')
-  btn?.addEventListener('click', () => {
-    const titleInput = document.getElementById('episode-title') as HTMLInputElement
-    const urlInput = document.getElementById('episode-url') as HTMLInputElement
-    const durationInput = document.getElementById('episode-duration') as HTMLInputElement
+let feedPreviewEpisodes: Episode[] = []
+let selectedFeedPosition: 'head' | 'tail' = 'tail'
+let selectedFeedOrder: 'asc' | 'desc' = 'asc'
+let selectedSinglePosition: 'head' | 'tail' = 'tail'
+
+function initSidebar() {
+  const addBtn = document.getElementById('add-btn')
+  const sidebar = document.getElementById('sidebar')
+  const overlay = document.getElementById('sidebar-overlay')
+  const closeBtn = document.getElementById('sidebar-close')
+  const tabSingle = document.getElementById('sidebar-tab-single')
+  const tabFeed = document.getElementById('sidebar-tab-feed')
+  const singleContent = document.getElementById('sidebar-single')
+  const feedContent = document.getElementById('sidebar-feed')
+
+  function openSidebar() {
+    sidebar?.classList.add('open')
+    overlay?.classList.remove('hidden')
+    overlay?.classList.add('open')
+    document.body.style.overflow = 'hidden'
+    document.querySelector('main')?.setAttribute('inert', '')
+    document.querySelector('header')?.setAttribute('inert', '')
+  }
+
+  function closeSidebar() {
+    sidebar?.classList.remove('open')
+    overlay?.classList.add('hidden')
+    overlay?.classList.remove('open')
+    document.body.style.overflow = ''
+    document.querySelector('main')?.removeAttribute('inert')
+    document.querySelector('header')?.removeAttribute('inert')
+  }
+
+  addBtn?.addEventListener('click', openSidebar)
+  closeBtn?.addEventListener('click', closeSidebar)
+  overlay?.addEventListener('click', closeSidebar)
+
+  tabSingle?.addEventListener('click', () => {
+    tabSingle.classList.add('active')
+    tabFeed?.classList.remove('active')
+    singleContent?.classList.remove('hidden')
+    feedContent?.classList.add('hidden')
+  })
+
+  tabFeed?.addEventListener('click', () => {
+    tabFeed.classList.add('active')
+    tabSingle?.classList.remove('active')
+    feedContent?.classList.remove('hidden')
+    singleContent?.classList.add('hidden')
+  })
+
+  const singleBtns = document.querySelectorAll('#sidebar-single .position-btn')
+  singleBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      singleBtns.forEach((b) => b.classList.remove('active'))
+      btn.classList.add('active')
+      selectedSinglePosition = (btn as HTMLElement).dataset.position as 'head' | 'tail'
+    })
+  })
+
+  const addSingleBtn = document.getElementById('sidebar-add-single')
+  addSingleBtn?.addEventListener('click', () => {
+    const titleInput = document.getElementById('sidebar-episode-title') as HTMLInputElement
+    const urlInput = document.getElementById('sidebar-episode-url') as HTMLInputElement
+    const durationInput = document.getElementById('sidebar-episode-duration') as HTMLInputElement
 
     const title = titleInput.value.trim()
     const url = urlInput.value.trim()
@@ -227,74 +284,133 @@ function initAddEpisodeForm() {
       duration,
     }
 
-    addEpisode(episode)
+    addEpisode(episode, selectedSinglePosition)
     renderEpisodes()
 
     titleInput.value = ''
     urlInput.value = ''
     durationInput.value = ''
-  })
-}
 
-function initTabs() {
-  const tabSingle = document.getElementById('tab-single')
-  const tabFeed = document.getElementById('tab-feed')
-  const formSingle = document.getElementById('add-episode-form')
-  const formFeed = document.getElementById('import-feed-form')
-
-  tabSingle?.addEventListener('click', () => {
-    tabSingle.classList.add('active')
-    tabFeed?.classList.remove('active')
-    formSingle?.classList.remove('hidden')
-    formFeed?.classList.add('hidden')
+    showImportStatus(`Added "${title}" to ${selectedSinglePosition === 'head' ? 'beginning' : 'end'} of queue`)
   })
 
-  tabFeed?.addEventListener('click', () => {
-    tabFeed.classList.add('active')
-    tabSingle?.classList.remove('active')
-    formFeed?.classList.remove('hidden')
-    formSingle?.classList.add('hidden')
-  })
-}
+  const fetchFeedBtn = document.getElementById('sidebar-fetch-feed')
+  const feedPreview = document.getElementById('sidebar-feed-preview')
+  const feedStatus = document.getElementById('sidebar-feed-status')
+  const feedEpisodeList = document.getElementById('sidebar-episode-list')
 
-function initFeedImport() {
-  const btn = document.getElementById('import-feed-btn')
-  const status = document.getElementById('import-status')
-
-  btn?.addEventListener('click', async () => {
-    const urlInput = document.getElementById('feed-url') as HTMLInputElement
+  fetchFeedBtn?.addEventListener('click', async () => {
+    const urlInput = document.getElementById('sidebar-feed-url') as HTMLInputElement
     const url = urlInput.value.trim()
 
     if (!url) {
-      status!.textContent = 'Please enter a feed URL'
+      feedStatus!.textContent = 'Please enter a feed URL'
       return
     }
 
-    status!.textContent = 'Fetching feed...'
+    feedStatus!.textContent = 'Fetching feed...'
+    feedPreview?.classList.add('hidden')
 
     try {
       const feed = await parseFeed(url)
-      const accountId = getAccountId()
-
-      for (const ep of feed.episodes) {
-        addEpisode(ep)
-      }
-
-      if (accountId && feed.episodes.length > 0) {
-        try {
-          await addEpisodesApi(accountId, feed.episodes)
-        } catch (e) {
-          console.error('Failed to save episodes:', e)
-        }
-      }
-
-      renderEpisodes()
-      status!.textContent = `Imported ${feed.episodes.length} episodes from "${feed.title}"`
-      urlInput.value = ''
+      feedPreviewEpisodes = feed.episodes
+      feedStatus!.textContent = `Found ${feed.episodes.length} episodes from "${feed.title}"`
+      renderFeedPreview()
+      feedPreview?.classList.remove('hidden')
     } catch (e) {
-      status!.textContent = `Error: ${e instanceof Error ? e.message : 'Failed to parse feed'}`
+      feedStatus!.textContent = `Error: ${e instanceof Error ? e.message : 'Failed to parse feed'}`
     }
   })
+
+  const feedPositionBtns = document.querySelectorAll('#sidebar-feed .position-btn')
+  feedPositionBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      feedPositionBtns.forEach((b) => b.classList.remove('active'))
+      btn.classList.add('active')
+      selectedFeedPosition = (btn as HTMLElement).dataset.position as 'head' | 'tail'
+    })
+  })
+
+  const sortBtns = document.querySelectorAll('.sort-btn')
+  sortBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      sortBtns.forEach((b) => b.classList.remove('active'))
+      btn.classList.add('active')
+      selectedFeedOrder = (btn as HTMLElement).dataset.order as 'asc' | 'desc'
+      renderFeedPreview()
+    })
+  })
+
+  function renderFeedPreview() {
+    const feedEpisodeList = document.getElementById('sidebar-episode-list')
+    if (!feedEpisodeList) return
+
+    const episodes = [...feedPreviewEpisodes]
+    if (selectedFeedOrder === 'asc') {
+      episodes.sort((a, b) => (a.pubDate || 0) - (b.pubDate || 0))
+    } else {
+      episodes.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0))
+    }
+
+    feedEpisodeList.innerHTML = ''
+    episodes.forEach((ep, idx) => {
+      const div = document.createElement('div')
+      div.className = 'feed-episode-item'
+      div.innerHTML = `
+        <span class="feed-episode-number">${idx + 1}.</span>
+        <span class="episode-title">${ep.title}</span>
+        <span class="episode-duration">${formatDuration(ep.duration)}</span>
+      `
+      feedEpisodeList.appendChild(div)
+    })
+  }
+
+  const addFeedBtn = document.getElementById('sidebar-add-feed')
+  addFeedBtn?.addEventListener('click', async () => {
+    if (feedPreviewEpisodes.length === 0) {
+      alert('No episodes to add. Please fetch a feed first.')
+      return
+    }
+
+    const episodes = [...feedPreviewEpisodes]
+    if (selectedFeedOrder === 'desc') {
+      episodes.reverse()
+    }
+
+    const position = selectedFeedPosition
+    for (const ep of episodes) {
+      await addEpisode(ep, position)
+    }
+
+    renderEpisodes()
+
+    const accountId = getAccountId()
+    if (accountId && episodes.length > 0) {
+      try {
+        await addEpisodesApi(accountId, episodes)
+      } catch (e) {
+        console.error('Failed to save episodes:', e)
+      }
+    }
+
+    feedPreviewEpisodes = []
+    feedPreview?.classList.add('hidden')
+    const urlInput = document.getElementById('sidebar-feed-url') as HTMLInputElement
+    urlInput.value = ''
+
+    showImportStatus(`Added ${episodes.length} episodes to ${position === 'head' ? 'beginning' : 'end'} of queue`)
+    closeSidebar()
+  })
+}
+
+function showImportStatus(message: string) {
+  const status = document.getElementById('import-status')
+  if (status) {
+    status.textContent = message
+    setTimeout(() => {
+      status.textContent = ''
+    }, 3000)
+  }
 }
 
 async function initPlayer(accountId: string) {

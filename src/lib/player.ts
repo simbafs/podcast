@@ -11,8 +11,12 @@ export function getEpisodes(): Episode[] {
   return EPISODES
 }
 
-export async function addEpisode(episode: Episode) {
-  EPISODES.push(episode)
+export async function addEpisode(episode: Episode, position: 'head' | 'tail' = 'tail') {
+  if (position === 'head') {
+    EPISODES.unshift(episode)
+  } else {
+    EPISODES.push(episode)
+  }
   const accountId = getAccountId()
   if (accountId) {
     try {
