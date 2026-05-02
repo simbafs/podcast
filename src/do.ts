@@ -80,8 +80,8 @@ export class ProgressDO extends DurableObject {
     }
 
     this.initialized = true
-    } catch (e) {
-      console.error('init error:', e)
+    } catch {
+      // D1 not available in local dev, use in-memory state
     }
   }
 

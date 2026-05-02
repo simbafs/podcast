@@ -2160,8 +2160,7 @@ var ProgressDO = /* @__PURE__ */ __name(class extends DurableObject {
         }
       }
       this.initialized = true;
-    } catch (e) {
-      console.error("init error:", e);
+    } catch {
     }
   }
   async fetch(req) {
