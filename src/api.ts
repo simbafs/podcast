@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { getRuntimeKey } from 'hono/adapter'
+import { INDEX_HTML } from './assets/index'
 
 export interface Env {
   DB: D1Database
@@ -15,7 +16,7 @@ export function createApp() {
   const app = new Hono<{ Bindings: Env }>()
 
   app.get('/', async (c) => {
-    return c.html('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Podcast Sync</title></head><body><div id="app"><h1>Loading...</h1></div><script type="module" src="/main.js"></script></body></html>')
+    return c.html(INDEX_HTML)
   })
 
   app.get('/api/state', async (c) => {

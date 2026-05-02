@@ -2044,6 +2044,133 @@ var Hono2 = /* @__PURE__ */ __name(class extends Hono {
     });
   }
 }, "Hono2");
+var INDEX_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="description" content="Podcast Sync - Cross-device playback sync">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <title>Podcast Sync</title>
+  <link rel="stylesheet" href="/global.css">
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <h1>Podcast Sync</h1>
+      <span id="device-badge" class="device-badge"></span>
+    </header>
+
+    <main class="main">
+      <section class="account-section">
+        <div id="account-info" class="account-info hidden">
+          <p>Account: <code id="account-id-display"></code></p>
+          <p>Device: <code id="device-id-display"></code></p>
+          <button id="share-btn" class="btn btn-secondary">Share Link</button>
+        </div>
+
+        <div id="no-account" class="no-account">
+          <button id="create-account-btn" class="btn btn-primary">Create New Account</button>
+        </div>
+      </section>
+
+      <section class="player-section">
+        <div class="episode-list" id="episode-list">
+          <div class="episode-item" data-episode="ep1">
+            <div class="episode-info">
+              <span class="episode-number">01</span>
+              <span class="episode-title">Introduction to Cloudflare Workers</span>
+            </div>
+            <div class="episode-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: 0%"></div>
+              </div>
+              <span class="time">00:00 / 62:15</span>
+            </div>
+          </div>
+
+          <div class="episode-item" data-episode="ep2">
+            <div class="episode-info">
+              <span class="episode-number">02</span>
+              <span class="episode-title">Durable Objects Deep Dive</span>
+            </div>
+            <div class="episode-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: 0%"></div>
+              </div>
+              <span class="time">00:00 / 55:30</span>
+            </div>
+          </div>
+
+          <div class="episode-item" data-episode="ep3">
+            <div class="episode-info">
+              <span class="episode-number">03</span>
+              <span class="episode-title">Building APIs with Hono</span>
+            </div>
+            <div class="episode-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: 0%"></div>
+              </div>
+              <span class="time">00:00 / 48:45</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="player-controls">
+          <button id="prev-btn" class="control-btn" disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+          </button>
+          <button id="play-btn" class="play-btn">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="play-icon"><path d="M8 5v14l11-7z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor" class="pause-icon hidden"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          </button>
+          <button id="next-btn" class="control-btn" disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
+        </div>
+
+        <div class="now-playing">
+          <div class="now-playing-info">
+            <span class="now-playing-title" id="now-playing-title">Select an episode</span>
+            <span class="now-playing-episode" id="now-playing-episode">-</span>
+          </div>
+          <div class="time-display">
+            <span id="current-time">00:00</span>
+            <span>/</span>
+            <span id="duration">00:00</span>
+          </div>
+        </div>
+
+        <div class="progress-slider-container">
+          <input type="range" id="progress-slider" class="progress-slider" min="0" max="100" value="0">
+        </div>
+
+        <div class="sync-status">
+          <span id="sync-indicator" class="sync-indicator"></span>
+          <span id="sync-text">Synced</span>
+        </div>
+      </section>
+
+      <div id="conflict-modal" class="modal hidden">
+        <div class="modal-content">
+          <h2>Playback Conflict</h2>
+          <p>Another device is currently playing.</p>
+          <p id="conflict-device"></p>
+          <div class="modal-actions">
+            <button id="cancel-conflict" class="btn btn-secondary">Cancel</button>
+            <button id="takeover-btn" class="btn btn-primary">Take Over</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <audio id="audio-player" preload="metadata"></audio>
+  <script type="module" src="/main.js"><\/script>
+</body>
+</html>`;
 function getDO(env, accountId) {
   const id = env.PROGRESS_DO.idFromName(accountId);
   return env.PROGRESS_DO.get(id);
@@ -2052,7 +2179,7 @@ __name(getDO, "getDO");
 function createApp() {
   const app = new Hono2();
   app.get("/", async (c) => {
-    return c.html('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Podcast Sync</title></head><body><div id="app"><h1>Loading...</h1></div><script type="module" src="/main.js"><\/script></body></html>');
+    return c.html(INDEX_HTML);
   });
   app.get("/api/state", async (c) => {
     const accountId = c.req.query("accountId");

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+export const INDEX_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -124,4 +124,4 @@
   <audio id="audio-player" preload="metadata"></audio>
   <script type="module" src="/main.js"></script>
 </body>
-</html>
+</html>`
