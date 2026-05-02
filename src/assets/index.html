@@ -31,46 +31,14 @@
       </section>
 
       <section class="player-section">
-        <div class="episode-list" id="episode-list">
-          <div class="episode-item" data-episode="ep1">
-            <div class="episode-info">
-              <span class="episode-number">01</span>
-              <span class="episode-title">Introduction to Cloudflare Workers</span>
-            </div>
-            <div class="episode-progress">
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: 0%"></div>
-              </div>
-              <span class="time">00:00 / 62:15</span>
-            </div>
-          </div>
-
-          <div class="episode-item" data-episode="ep2">
-            <div class="episode-info">
-              <span class="episode-number">02</span>
-              <span class="episode-title">Durable Objects Deep Dive</span>
-            </div>
-            <div class="episode-progress">
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: 0%"></div>
-              </div>
-              <span class="time">00:00 / 55:30</span>
-            </div>
-          </div>
-
-          <div class="episode-item" data-episode="ep3">
-            <div class="episode-info">
-              <span class="episode-number">03</span>
-              <span class="episode-title">Building APIs with Hono</span>
-            </div>
-            <div class="episode-progress">
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: 0%"></div>
-              </div>
-              <span class="time">00:00 / 48:45</span>
-            </div>
-          </div>
+        <div id="add-episode-form" class="add-episode-form">
+          <input type="text" id="episode-title" placeholder="Episode title" class="input">
+          <input type="text" id="episode-url" placeholder="Audio URL (mp3)" class="input">
+          <input type="number" id="episode-duration" placeholder="Duration (seconds)" class="input">
+          <button id="add-episode-btn" class="btn btn-primary">Add Episode</button>
         </div>
+
+        <div class="episode-list" id="episode-list"></div>
 
         <div class="player-controls">
           <button id="prev-btn" class="control-btn" disabled>

@@ -84,11 +84,10 @@
   }
 
   // src/lib/player.ts
-  var EPISODES = [
-    { id: "ep1", title: "Introduction to Cloudflare Workers", audioUrl: "/audio/ep1.mp3", duration: 3735 },
-    { id: "ep2", title: "Durable Objects Deep Dive", audioUrl: "/audio/ep2.mp3", duration: 3330 },
-    { id: "ep3", title: "Building APIs with Hono", audioUrl: "/audio/ep3.mp3", duration: 2925 }
-  ];
+  var EPISODES2 = [];
+  function getEpisodes() {
+    return EPISODES2;
+  }
   var SYNC_INTERVAL = 12e4;
   var SEEK_DEBOUNCE = 5e3;
   var Player = class {
@@ -114,7 +113,7 @@
       try {
         const state = await fetchState(accountId);
         if (state.account?.activeEpisodeId) {
-          const episode = EPISODES.find((e) => e.id === state.account.activeEpisodeId);
+          const episode = EPISODES2.find((e) => e.id === state.account.activeEpisodeId);
           if (episode) {
             this.currentEpisodeId = episode.id;
             this.audio.src = episode.audioUrl;
@@ -129,7 +128,7 @@
     async playEpisode(episodeId) {
       const accountId = getAccountId();
       if (!accountId) return;
-      const episode = EPISODES.find((e) => e.id === episodeId);
+      const episode = EPISODES2.find((e) => e.id === episodeId);
       if (!episode) return;
       const wasPlaying = this.isPlaying;
       if (this.currentEpisodeId && this.currentEpisodeId !== episodeId) {
@@ -154,8 +153,8 @@
       if (!accountId) return;
       const sessionId = getSessionId();
       const deviceId = getDeviceId();
-      const fromEpisode = EPISODES.find((e) => e.id === this.currentEpisodeId);
-      const toEpisode = EPISODES.find((e) => e.id === newEpisodeId);
+      const fromEpisode = EPISODES2.find((e) => e.id === this.currentEpisodeId);
+      const toEpisode = EPISODES2.find((e) => e.id === newEpisodeId);
       if (!fromEpisode || !toEpisode) return;
       try {
         await transition({
@@ -311,7 +310,7 @@
     }
     updateUI() {
       if (!this.currentEpisodeId) return;
-      const episode = EPISODES.find((e) => e.id === this.currentEpisodeId);
+      const episode = EPISODES2.find((e) => e.id === this.currentEpisodeId);
       if (!episode) return;
       document.getElementById("now-playing-title").textContent = episode.title;
       document.getElementById("now-playing-episode").textContent = `Episode ${episode.id.replace("ep", "")}`;
@@ -448,10 +447,47 @@
     document.getElementById("account-info")?.classList.add("hidden");
     document.getElementById("no-account")?.classList.remove("hidden");
   }
+  function renderEpisodes() {
+    const list = document.getElementById("episode-list");
+    if (!list) return;
+    list.innerHTML = "";
+    const episodes = getEpisodes();
+    if (episodes.length === 0) {
+      list.innerHTML = '<p class="no-episodes">No episodes yet. Add one above!</p>';
+      return;
+    }
+    episodes.forEach((ep, idx) => {
+      const div = document.createElement("div");
+      div.className = "episode-item";
+      div.setAttribute("data-episode", ep.id);
+      div.innerHTML = `
+      <div class="episode-info">
+        <span class="episode-number">${String(idx + 1).padStart(2, "0")}</span>
+        <span class="episode-title">${ep.title}</span>
+      </div>
+      <div class="episode-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 0%"></div>
+        </div>
+        <span class="time">00:00 / ${formatDuration(ep.duration)}</span>
+      </div>
+    `;
+      div.addEventListener("click", () => {
+        player?.playEpisode(ep.id);
+      });
+      list.appendChild(div);
+    });
+  }
+  function formatDuration(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  }
   async function initPlayer(accountId) {
     const audio = document.getElementById("audio-player");
     player = new Player(audio);
     await player.init();
+    renderEpisodes();
   }
   document.addEventListener("DOMContentLoaded", initApp);
 })();

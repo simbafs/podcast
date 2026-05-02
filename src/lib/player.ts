@@ -8,11 +8,19 @@ export interface Episode {
   duration: number
 }
 
-export const EPISODES: Episode[] = [
-  { id: 'ep1', title: 'Introduction to Cloudflare Workers', audioUrl: '/audio/ep1.mp3', duration: 3735 },
-  { id: 'ep2', title: 'Durable Objects Deep Dive', audioUrl: '/audio/ep2.mp3', duration: 3330 },
-  { id: 'ep3', title: 'Building APIs with Hono', audioUrl: '/audio/ep3.mp3', duration: 2925 },
-]
+let EPISODES: Episode[] = []
+
+export function setEpisodes(episodes: Episode[]) {
+  EPISODES = episodes
+}
+
+export function getEpisodes(): Episode[] {
+  return EPISODES
+}
+
+export function addEpisode(episode: Episode) {
+  EPISODES.push(episode)
+}
 
 const SYNC_INTERVAL = 120000
 const SEEK_DEBOUNCE = 5000

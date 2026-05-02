@@ -1,6 +1,6 @@
 import { getAccountId, getDeviceId, setAccountId, clearAccount, getSessionId } from './lib/storage'
 import { fetchState, generateUUID } from './lib/api'
-import { Player, EPISODES } from './lib/player'
+import { Player, getEpisodes, addEpisode, Episode } from './lib/player'
 
 let player: Player
 
@@ -113,10 +113,84 @@ function showNoAccount() {
   document.getElementById('no-account')?.classList.remove('hidden')
 }
 
+function renderEpisodes() {
+  const list = document.getElementById('episode-list')
+  if (!list) return
+
+  list.innerHTML = ''
+  const episodes = getEpisodes()
+
+  if (episodes.length === 0) {
+    list.innerHTML = '<p class="no-episodes">No episodes yet. Add one above!</p>'
+    return
+  }
+
+  episodes.forEach((ep, idx) => {
+    const div = document.createElement('div')
+    div.className = 'episode-item'
+    div.setAttribute('data-episode', ep.id)
+    div.innerHTML = `
+      <div class="episode-info">
+        <span class="episode-number">${String(idx + 1).padStart(2, '0')}</span>
+        <span class="episode-title">${ep.title}</span>
+      </div>
+      <div class="episode-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: 0%"></div>
+        </div>
+        <span class="time">00:00 / ${formatDuration(ep.duration)}</span>
+      </div>
+    `
+    div.addEventListener('click', () => {
+      player?.playEpisode(ep.id)
+    })
+    list.appendChild(div)
+  })
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
+function initAddEpisodeForm() {
+  const btn = document.getElementById('add-episode-btn')
+  btn?.addEventListener('click', () => {
+    const titleInput = document.getElementById('episode-title') as HTMLInputElement
+    const urlInput = document.getElementById('episode-url') as HTMLInputElement
+    const durationInput = document.getElementById('episode-duration') as HTMLInputElement
+
+    const title = titleInput.value.trim()
+    const url = urlInput.value.trim()
+    const duration = parseInt(durationInput.value, 10)
+
+    if (!title || !url || isNaN(duration)) {
+      alert('Please fill in all fields')
+      return
+    }
+
+    const episode: Episode = {
+      id: generateUUID(),
+      title,
+      audioUrl: url,
+      duration,
+    }
+
+    addEpisode(episode)
+    renderEpisodes()
+
+    titleInput.value = ''
+    urlInput.value = ''
+    durationInput.value = ''
+  })
+}
+
 async function initPlayer(accountId: string) {
   const audio = document.getElementById('audio-player') as HTMLAudioElement
   player = new Player(audio)
   await player.init()
+  renderEpisodes()
 }
 
 document.addEventListener('DOMContentLoaded', initApp)
