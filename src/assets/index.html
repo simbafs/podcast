@@ -20,9 +20,9 @@
     <main class="main">
       <section class="account-section">
         <div id="account-info" class="account-info hidden">
-          <p>Account: <code id="account-id-display"></code></p>
-          <p>Device: <code id="device-id-display"></code></p>
-          <button id="share-btn" class="btn btn-secondary">Share Link</button>
+          <button id="share-btn" class="btn btn-icon" title="Share">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>
+          </button>
         </div>
 
         <div id="no-account" class="no-account">
@@ -30,74 +30,72 @@
         </div>
       </section>
 
-      <section class="player-section">
+      <section class="content-section">
         <div class="tabs">
-          <button id="tab-single" class="tab-btn active">Single Episode</button>
-          <button id="tab-feed" class="tab-btn">Import RSS Feed</button>
+          <button id="tab-single" class="tab-btn active">Single</button>
+          <button id="tab-feed" class="tab-btn">RSS Feed</button>
         </div>
 
         <div id="add-episode-form" class="add-episode-form">
           <input type="text" id="episode-title" placeholder="Episode title" class="input">
-          <input type="text" id="episode-url" placeholder="Audio URL (mp3)" class="input">
-          <input type="number" id="episode-duration" placeholder="Duration (seconds)" class="input">
-          <button id="add-episode-btn" class="btn btn-primary">Add Episode</button>
+          <input type="text" id="episode-url" placeholder="Audio URL" class="input">
+          <input type="number" id="episode-duration" placeholder="Duration (sec)" class="input">
+          <button id="add-episode-btn" class="btn btn-primary btn-sm">Add</button>
         </div>
 
         <div id="import-feed-form" class="add-episode-form hidden">
           <input type="text" id="feed-url" placeholder="RSS Feed URL" class="input">
-          <button id="import-feed-btn" class="btn btn-primary">Import Feed</button>
-          <p id="import-status" class="import-status"></p>
+          <button id="import-feed-btn" class="btn btn-primary btn-sm">Import</button>
         </div>
+
+        <p id="import-status" class="import-status"></p>
 
         <div class="episode-list" id="episode-list"></div>
-
-        <div class="player-controls">
-          <button id="prev-btn" class="control-btn" disabled>
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
-          </button>
-          <button id="play-btn" class="play-btn">
-            <svg viewBox="0 0 24 24" fill="currentColor" class="play-icon"><path d="M8 5v14l11-7z"/></svg>
-            <svg viewBox="0 0 24 24" fill="currentColor" class="pause-icon hidden"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-          </button>
-          <button id="next-btn" class="control-btn" disabled>
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-          </button>
-        </div>
-
-        <div class="now-playing">
-          <div class="now-playing-info">
-            <span class="now-playing-title" id="now-playing-title">Select an episode</span>
-            <span class="now-playing-episode" id="now-playing-episode">-</span>
-          </div>
-          <div class="time-display">
-            <span id="current-time">00:00</span>
-            <span>/</span>
-            <span id="duration">00:00</span>
-          </div>
-        </div>
-
-        <div class="progress-slider-container">
-          <input type="range" id="progress-slider" class="progress-slider" min="0" max="100" value="0">
-        </div>
-
-        <div class="sync-status">
-          <span id="sync-indicator" class="sync-indicator"></span>
-          <span id="sync-text">Synced</span>
-        </div>
       </section>
+    </main>
 
-      <div id="conflict-modal" class="modal hidden">
-        <div class="modal-content">
-          <h2>Playback Conflict</h2>
-          <p>Another device is currently playing.</p>
-          <p id="conflict-device"></p>
-          <div class="modal-actions">
-            <button id="cancel-conflict" class="btn btn-secondary">Cancel</button>
-            <button id="takeover-btn" class="btn btn-primary">Take Over</button>
-          </div>
+    <footer class="player-bar">
+      <div class="player-episode-info">
+        <span class="player-episode-title" id="now-playing-title">Select an episode</span>
+        <span class="player-episode-time" id="now-playing-episode">-</span>
+      </div>
+
+      <div class="player-controls">
+        <button id="prev-btn" class="control-btn" disabled>
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        </button>
+        <button id="play-btn" class="play-btn">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="play-icon"><path d="M8 5v14l11-7z"/></svg>
+          <svg viewBox="0 0 24 24" fill="currentColor" class="pause-icon hidden"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        </button>
+        <button id="next-btn" class="control-btn" disabled>
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+        </button>
+      </div>
+
+      <div class="player-progress">
+        <span id="current-time" class="time-text">0:00</span>
+        <input type="range" id="progress-slider" class="progress-slider" min="0" max="100" value="0">
+        <span id="duration" class="time-text">0:00</span>
+      </div>
+
+      <div class="sync-status">
+        <span id="sync-indicator" class="sync-indicator"></span>
+        <span id="sync-text">Synced</span>
+      </div>
+    </footer>
+
+    <div id="conflict-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Playback Conflict</h2>
+        <p>Another device is playing.</p>
+        <p id="conflict-device"></p>
+        <div class="modal-actions">
+          <button id="cancel-conflict" class="btn btn-secondary">Cancel</button>
+          <button id="takeover-btn" class="btn btn-primary">Take Over</button>
         </div>
       </div>
-    </main>
+    </div>
   </div>
 
   <audio id="audio-player" preload="metadata"></audio>

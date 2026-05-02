@@ -128,25 +128,19 @@ function renderEpisodes() {
   const episodes = getEpisodes()
 
   if (episodes.length === 0) {
-    list.innerHTML = '<p class="no-episodes">No episodes yet. Add one above!</p>'
+    list.innerHTML = '<p style="text-align:center;color:var(--color-text-muted);padding:2rem">No episodes yet</p>'
     return
   }
 
-  episodes.forEach((ep, idx) => {
+  episodes.forEach((ep) => {
     const div = document.createElement('div')
     div.className = 'episode-item'
     div.setAttribute('data-episode', ep.id)
     div.innerHTML = `
       <div class="episode-info">
-        <span class="episode-number">${String(idx + 1).padStart(2, '0')}</span>
         <span class="episode-title">${ep.title}</span>
       </div>
-      <div class="episode-progress">
-        <div class="progress-bar">
-          <div class="progress-fill" style="width: 0%"></div>
-        </div>
-        <span class="time">00:00 / ${formatDuration(ep.duration)}</span>
-      </div>
+      <span class="episode-duration">${formatDuration(ep.duration)}</span>
     `
     div.addEventListener('click', () => {
       player?.playEpisode(ep.id)
