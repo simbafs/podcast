@@ -111,8 +111,6 @@ async function initApp() {
 function showAccountInfo(accountId: string) {
   document.getElementById('account-info')?.classList.remove('hidden')
   document.getElementById('no-account')?.classList.add('hidden')
-  document.getElementById('account-id-display')!.textContent = accountId
-  document.getElementById('device-id-display')!.textContent = getDeviceId()
 }
 
 function showNoAccount() {
