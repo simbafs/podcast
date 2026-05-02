@@ -37,10 +37,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  padding: 0 1rem;
   padding-bottom: var(--player-height);
-  max-width: 800px;
-  margin: 0 auto;
 }
 
 .header {
