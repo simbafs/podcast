@@ -5,6 +5,56 @@ import { parseFeed } from './lib/rss'
 
 let player: Player
 
+type Theme = 'dark' | 'light' | 'system'
+const THEME_KEY = 'podcast-theme'
+
+function getStoredTheme(): Theme {
+  return (localStorage.getItem(THEME_KEY) as Theme) || 'dark'
+}
+
+function applyTheme(theme: Theme) {
+  localStorage.setItem(THEME_KEY, theme)
+  const root = document.documentElement
+  const iconDark = document.getElementById('theme-icon-dark')
+  const iconLight = document.getElementById('theme-icon-light')
+  const iconSystem = document.getElementById('theme-icon-system')
+
+  iconDark?.classList.add('hidden')
+  iconLight?.classList.add('hidden')
+  iconSystem?.classList.add('hidden')
+
+  if (theme === 'system') {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light')
+    iconSystem?.classList.remove('hidden')
+  } else {
+    root.setAttribute('data-theme', theme)
+    if (theme === 'light') {
+      iconLight?.classList.remove('hidden')
+    } else {
+      iconDark?.classList.remove('hidden')
+    }
+  }
+}
+
+function cycleTheme() {
+  const current = getStoredTheme()
+  const order: Theme[] = ['dark', 'light', 'system']
+  const idx = order.indexOf(current)
+  const next = order[(idx + 1) % order.length]
+  applyTheme(next)
+}
+
+function initTheme() {
+  applyTheme(getStoredTheme())
+  document.getElementById('theme-toggle')?.addEventListener('click', cycleTheme)
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (getStoredTheme() === 'system') {
+      applyTheme('system')
+    }
+  })
+}
+
 function generateShareLink(accountId: string): string {
   const url = new URL(window.location.href)
   url.searchParams.set('account', accountId)
@@ -18,6 +68,7 @@ async function initApp() {
   const urlAccountId = urlParams.get('account')
 
   document.getElementById('device-badge')!.textContent = `Device: ${deviceId.slice(0, 8)}`
+  initTheme()
 
   if (urlAccountId && urlAccountId !== accountId) {
     setAccountId(urlAccountId)
@@ -252,6 +303,14 @@ async function initPlayer(accountId: string) {
   player = new Player(audio)
   await player.init()
   renderEpisodes()
+
+  const currentEpisodeId = player.getCurrentEpisodeId()
+  if (currentEpisodeId) {
+    setTimeout(() => {
+      const activeEl = document.querySelector('.episode-item.active')
+      activeEl?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
+  }
 }
 
 document.addEventListener('DOMContentLoaded', initApp)

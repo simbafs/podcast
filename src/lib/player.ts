@@ -63,17 +63,21 @@ export class Player {
 
     try {
       const state = await fetchState(accountId)
-      if (state.account?.activeEpisodeId) {
-        const episode = EPISODES.find((e) => e.id === state.account!.activeEpisodeId)
-        if (episode) {
-          this.currentEpisodeId = episode.id
-          this.audio.src = episode.audioUrl
-          this.audio.currentTime = state.account.positionSec
-          this.updateUI()
-        }
-      }
+      await this.loadState(state)
     } catch (e) {
       console.error('Failed to init player:', e)
+    }
+  }
+
+  private async loadState(state: StateResponse) {
+    if (state.account?.activeEpisodeId) {
+      const episode = EPISODES.find((e) => e.id === state.account!.activeEpisodeId)
+      if (episode) {
+        this.currentEpisodeId = episode.id
+        this.audio.src = episode.audioUrl
+        this.audio.currentTime = state.account.positionSec
+        this.updateUI()
+      }
     }
   }
 
