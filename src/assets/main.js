@@ -82,11 +82,6 @@
     });
     if (!res.ok) throw new Error("Failed to takeover");
   }
-  async function fetchEpisodes(accountId) {
-    const res = await fetch(`${API_BASE}/api/episodes?accountId=${encodeURIComponent(accountId)}`);
-    if (!res.ok) throw new Error("Failed to fetch episodes");
-    return res.json();
-  }
   async function addEpisodes(accountId, episodes) {
     const res = await fetch(`${API_BASE}/api/episodes`, {
       method: "POST",
@@ -115,8 +110,8 @@
   }
   async function loadEpisodes(accountId) {
     try {
-      const res = await fetchEpisodes(accountId);
-      EPISODES = res.episodes;
+      const state = await fetchState(accountId);
+      EPISODES = state.episodes || [];
     } catch (e) {
       console.error("Failed to load episodes:", e);
       EPISODES = [];

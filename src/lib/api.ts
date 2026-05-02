@@ -18,6 +18,7 @@ export interface EpisodeProgress {
 export interface StateResponse {
   account: AccountState | null
   progress: Record<string, EpisodeProgress>
+  episodes: Episode[]
 }
 
 export interface ConflictError {

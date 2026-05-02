@@ -128,25 +128,20 @@ export class ProgressDO extends DurableObject {
   }
 
   private handleState() {
-    if (!this.account) {
-      return new Response(JSON.stringify({ account: null, progress: {} }), {
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-
-    const activeProgress = this.account.activeEpisodeId
-      ? this.progress.get(this.account.activeEpisodeId)
-      : null
-
     return new Response(
       JSON.stringify({
-        account: {
-          activeEpisodeId: this.account.activeEpisodeId,
-          positionSec: activeProgress?.positionSec || 0,
-          deviceId: this.account.activeDeviceId,
-          leaseUntil: this.account.leaseUntil,
-        },
+        account: this.account
+          ? {
+              activeEpisodeId: this.account.activeEpisodeId,
+              positionSec: this.account.activeEpisodeId
+                ? this.progress.get(this.account.activeEpisodeId)?.positionSec || 0
+                : 0,
+              deviceId: this.account.activeDeviceId,
+              leaseUntil: this.account.leaseUntil,
+            }
+          : null,
         progress: Object.fromEntries(this.progress),
+        episodes: this.episodes,
       }),
       { headers: { 'Content-Type': 'application/json' } }
     )

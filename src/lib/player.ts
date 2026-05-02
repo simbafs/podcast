@@ -1,5 +1,5 @@
 import { getAccountId, getDeviceId, getSessionId } from './storage'
-import { fetchState, updateProgress, transition, takeover, ConflictError, fetchEpisodes, addEpisodes, Episode } from './api'
+import { fetchState, updateProgress, transition, takeover, ConflictError, addEpisodes, Episode, StateResponse } from './api'
 
 let EPISODES: Episode[] = []
 
@@ -25,8 +25,8 @@ export async function addEpisode(episode: Episode) {
 
 export async function loadEpisodes(accountId: string) {
   try {
-    const res = await fetchEpisodes(accountId)
-    EPISODES = res.episodes
+    const state: StateResponse = await fetchState(accountId)
+    EPISODES = state.episodes || []
   } catch (e) {
     console.error('Failed to load episodes:', e)
     EPISODES = []
