@@ -38,6 +38,11 @@ export class ProgressDO extends DurableObject {
     super(ctx, env)
   }
 
+  private getAccountId(): string {
+    const url = new URL(this.req?.url || 'http://localhost')
+    return url.searchParams.get('accountId') || this.ctx.id.name || ''
+  }
+
   private async init() {
     if (this.initialized) return
 
@@ -321,7 +326,8 @@ export class ProgressDO extends DurableObject {
   private async persist() {
     if (!this.account) return
 
-    const accountId = this.ctx.id.name
+    const accountId = this.getAccountId()
+    if (!accountId) return
 
     await this.env.DB.prepare(
       `INSERT INTO accounts (id, active_session_id, active_device_id, active_episode_id, lease_until, updated_at)
