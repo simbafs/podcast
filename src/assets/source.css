@@ -37,7 +37,10 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  padding: 0 1rem;
   padding-bottom: var(--player-height);
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 .header {
@@ -255,6 +258,11 @@ body {
   flex-direction: column;
   padding: 0.75rem 1rem;
   gap: 0.5rem;
+  max-width: 800px;
+  margin: 0 auto;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
 }
 
 .player-episode-info {
