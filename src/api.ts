@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { getRuntimeKey } from 'hono/adapter'
-import { INDEX_HTML } from './assets/index'
 
 export interface Env {
   DB: D1Database
@@ -14,10 +13,6 @@ function getDO(env: Env, accountId: string) {
 
 export function createApp() {
   const app = new Hono<{ Bindings: Env }>()
-
-  app.get('/', async (c) => {
-    return c.html(INDEX_HTML)
-  })
 
   app.get('/api/state', async (c) => {
     const accountId = c.req.query('accountId')

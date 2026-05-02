@@ -18,5 +18,5 @@ class_name = "ProgressDO"
 tag = "v1"
 new_classes = ["ProgressDO"]
 
-[site]
-bucket = "src/assets"
+[assets]
+directory = "src/assets"
