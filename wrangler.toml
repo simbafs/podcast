@@ -1,0 +1,22 @@
+name = "podcast-sync"
+main = "dist/index.js"
+compatibility_date = "2025-05-02"
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "podcast-sync"
+database_id = "put-your-d1-database-id-here"
+
+[[durable_objects.bindings]]
+name = "PROGRESS_DO"
+class_name = "ProgressDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["ProgressDO"]
+
+[site]
+bucket = "src/assets"
