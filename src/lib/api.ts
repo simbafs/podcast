@@ -111,3 +111,26 @@ export async function takeover(body: {
 
   if (!res.ok) throw new Error('Failed to takeover')
 }
+
+export interface Episode {
+  id: string
+  title: string
+  audioUrl: string
+  duration: number
+}
+
+export async function fetchEpisodes(accountId: string): Promise<{ episodes: Episode[] }> {
+  const res = await fetch(`${API_BASE}/api/episodes?accountId=${encodeURIComponent(accountId)}`)
+  if (!res.ok) throw new Error('Failed to fetch episodes')
+  return res.json()
+}
+
+export async function addEpisodes(accountId: string, episodes: Episode[]): Promise<{ episodes: Episode[] }> {
+  const res = await fetch(`${API_BASE}/api/episodes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId, episodes }),
+  })
+  if (!res.ok) throw new Error('Failed to add episodes')
+  return res.json()
+}

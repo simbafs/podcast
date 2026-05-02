@@ -1,6 +1,6 @@
 import { getAccountId, getDeviceId, setAccountId, clearAccount, getSessionId } from './lib/storage'
-import { fetchState, generateUUID } from './lib/api'
-import { Player, getEpisodes, addEpisode, Episode } from './lib/player'
+import { fetchState, generateUUID, Episode, addEpisodes as addEpisodesApi } from './lib/api'
+import { Player, getEpisodes, addEpisode, loadEpisodes, setEpisodes } from './lib/player'
 import { parseFeed } from './lib/rss'
 
 let player: Player
@@ -231,13 +231,22 @@ function initFeedImport() {
 
     try {
       const feed = await parseFeed(url)
-      let count = 0
+      const accountId = getAccountId()
+
       for (const ep of feed.episodes) {
         addEpisode(ep)
-        count++
       }
+
+      if (accountId && feed.episodes.length > 0) {
+        try {
+          await addEpisodesApi(accountId, feed.episodes)
+        } catch (e) {
+          console.error('Failed to save episodes:', e)
+        }
+      }
+
       renderEpisodes()
-      status!.textContent = `Imported ${count} episodes from "${feed.title}"`
+      status!.textContent = `Imported ${feed.episodes.length} episodes from "${feed.title}"`
       urlInput.value = ''
     } catch (e) {
       status!.textContent = `Error: ${e instanceof Error ? e.message : 'Failed to parse feed'}`
@@ -246,6 +255,7 @@ function initFeedImport() {
 }
 
 async function initPlayer(accountId: string) {
+  await loadEpisodes(accountId)
   const audio = document.getElementById('audio-player') as HTMLAudioElement
   player = new Player(audio)
   await player.init()

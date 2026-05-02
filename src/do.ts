@@ -16,6 +16,13 @@ export interface EpisodeProgress {
   state: 'playing' | 'paused' | 'ended'
 }
 
+export interface Episode {
+  id: string
+  title: string
+  audioUrl: string
+  duration: number
+}
+
 interface Env {
   DB: D1Database
 }
@@ -23,6 +30,7 @@ interface Env {
 export class ProgressDO extends DurableObject {
   private account: AccountState | null = null
   private progress: Map<string, EpisodeProgress> = new Map()
+  private episodes: Episode[] = []
   private initialized = false
   private req: Request
 
@@ -106,6 +114,14 @@ export class ProgressDO extends DurableObject {
 
     if (req.method === 'POST' && path === '/do/takeover') {
       return this.handleTakeover(req)
+    }
+
+    if (req.method === 'GET' && path === '/do/episodes') {
+      return this.handleGetEpisodes()
+    }
+
+    if (req.method === 'POST' && path === '/do/episodes') {
+      return this.handleAddEpisodes(req)
     }
 
     return new Response('Not Found', { status: 404 })
@@ -364,5 +380,20 @@ export class ProgressDO extends DurableObject {
       }),
       { headers: { 'Content-Type': 'application/json' } }
     )
+  }
+
+  private handleGetEpisodes() {
+    return new Response(JSON.stringify({ episodes: this.episodes }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  private async handleAddEpisodes(req: Request) {
+    const body = await req.json<{ episodes: Episode[] }>()
+    this.episodes = [...this.episodes, ...body.episodes]
+    await this.persist()
+    return new Response(JSON.stringify({ episodes: this.episodes }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
 }

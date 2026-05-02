@@ -82,14 +82,45 @@
     });
     if (!res.ok) throw new Error("Failed to takeover");
   }
+  async function fetchEpisodes(accountId) {
+    const res = await fetch(`${API_BASE}/api/episodes?accountId=${encodeURIComponent(accountId)}`);
+    if (!res.ok) throw new Error("Failed to fetch episodes");
+    return res.json();
+  }
+  async function addEpisodes(accountId, episodes) {
+    const res = await fetch(`${API_BASE}/api/episodes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId, episodes })
+    });
+    if (!res.ok) throw new Error("Failed to add episodes");
+    return res.json();
+  }
 
   // src/lib/player.ts
   var EPISODES = [];
   function getEpisodes() {
     return EPISODES;
   }
-  function addEpisode(episode) {
+  async function addEpisode(episode) {
     EPISODES.push(episode);
+    const accountId = getAccountId();
+    if (accountId) {
+      try {
+        await addEpisodes(accountId, [episode]);
+      } catch (e) {
+        console.error("Failed to save episode:", e);
+      }
+    }
+  }
+  async function loadEpisodes(accountId) {
+    try {
+      const res = await fetchEpisodes(accountId);
+      EPISODES = res.episodes;
+    } catch (e) {
+      console.error("Failed to load episodes:", e);
+      EPISODES = [];
+    }
   }
   var SYNC_INTERVAL = 12e4;
   var SEEK_DEBOUNCE = 5e3;
@@ -602,13 +633,19 @@
       status.textContent = "Fetching feed...";
       try {
         const feed = await parseFeed(url);
-        let count = 0;
+        const accountId = getAccountId();
         for (const ep of feed.episodes) {
           addEpisode(ep);
-          count++;
+        }
+        if (accountId && feed.episodes.length > 0) {
+          try {
+            await addEpisodes(accountId, feed.episodes);
+          } catch (e) {
+            console.error("Failed to save episodes:", e);
+          }
         }
         renderEpisodes();
-        status.textContent = `Imported ${count} episodes from "${feed.title}"`;
+        status.textContent = `Imported ${feed.episodes.length} episodes from "${feed.title}"`;
         urlInput.value = "";
       } catch (e) {
         status.textContent = `Error: ${e instanceof Error ? e.message : "Failed to parse feed"}`;
@@ -616,6 +653,7 @@
     });
   }
   async function initPlayer(accountId) {
+    await loadEpisodes(accountId);
     const audio = document.getElementById("audio-player");
     player = new Player(audio);
     await player.init();

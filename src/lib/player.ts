@@ -1,12 +1,5 @@
 import { getAccountId, getDeviceId, getSessionId } from './storage'
-import { fetchState, updateProgress, transition, takeover, ConflictError } from './api'
-
-export interface Episode {
-  id: string
-  title: string
-  audioUrl: string
-  duration: number
-}
+import { fetchState, updateProgress, transition, takeover, ConflictError, fetchEpisodes, addEpisodes, Episode } from './api'
 
 let EPISODES: Episode[] = []
 
@@ -18,8 +11,26 @@ export function getEpisodes(): Episode[] {
   return EPISODES
 }
 
-export function addEpisode(episode: Episode) {
+export async function addEpisode(episode: Episode) {
   EPISODES.push(episode)
+  const accountId = getAccountId()
+  if (accountId) {
+    try {
+      await addEpisodes(accountId, [episode])
+    } catch (e) {
+      console.error('Failed to save episode:', e)
+    }
+  }
+}
+
+export async function loadEpisodes(accountId: string) {
+  try {
+    const res = await fetchEpisodes(accountId)
+    EPISODES = res.episodes
+  } catch (e) {
+    console.error('Failed to load episodes:', e)
+    EPISODES = []
+  }
 }
 
 const SYNC_INTERVAL = 120000

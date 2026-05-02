@@ -128,6 +128,42 @@ export function createApp() {
     return c.json(data)
   })
 
+  app.get('/api/episodes', async (c) => {
+    const accountId = c.req.query('accountId')
+    if (!accountId) {
+      return c.json({ error: 'accountId required' }, 400)
+    }
+
+    const stub = getDO(c.env, accountId)
+    const res = await stub.fetch(
+      new Request(`http://localhost/do/episodes?accountId=${encodeURIComponent(accountId)}`, { method: 'GET' })
+    )
+    const data = await res.json()
+    return c.json(data)
+  })
+
+  app.post('/api/episodes', async (c) => {
+    const body = await c.req.json<{
+      accountId: string
+      episodes: Array<{ id: string; title: string; audioUrl: string; duration: number }>
+    }>()
+
+    if (!body.accountId) {
+      return c.json({ error: 'accountId required' }, 400)
+    }
+
+    const stub = getDO(c.env, body.accountId)
+    const req = new Request(`http://localhost/do/episodes?accountId=${encodeURIComponent(body.accountId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ episodes: body.episodes }),
+    })
+
+    const res = await stub.fetch(req)
+    const data = await res.json()
+    return c.json(data)
+  })
+
   app.notFound((c) => c.text('Not Found', 404))
 
   return app

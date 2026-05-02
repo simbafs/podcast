@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm run build && wrangler dev --host 0.0.0.0",
+    "dev": "pnpm run build && wrangler dev --ip 0.0.0.0",
     "deploy": "wrangler deploy",
     "build": "npm run build:css && npm run build:worker && npm run build:frontend",
     "build:css": "npx @tailwindcss/cli -i src/assets/source.css -o dist/global.css --minify && cp dist/global.css src/assets/global.css",
