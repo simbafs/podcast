@@ -26,3 +26,17 @@ CREATE TABLE IF NOT EXISTS episode_progress (
 
 CREATE INDEX idx_progress_account ON episode_progress(account_id);
 CREATE INDEX idx_progress_episode ON episode_progress(episode_id);
+
+-- Episodes table (one row per episode per account)
+CREATE TABLE IF NOT EXISTS episodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id TEXT NOT NULL,
+    episode_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    audio_url TEXT NOT NULL,
+    duration INTEGER NOT NULL,
+    created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000),
+    UNIQUE(account_id, episode_id)
+);
+
+CREATE INDEX idx_episodes_account ON episodes(account_id);

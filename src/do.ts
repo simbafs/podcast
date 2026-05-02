@@ -90,6 +90,24 @@ export class ProgressDO extends DurableObject {
           updatedAt: p.updated_at,
         })
       }
+
+      const episodeRows = await this.env.DB.prepare(
+        'SELECT * FROM episodes WHERE account_id = ?'
+      ).bind(accountId).all<{
+        episode_id: string
+        title: string
+        audio_url: string
+        duration: number
+      }>()
+
+      for (const ep of episodeRows.results || []) {
+        this.episodes.push({
+          id: ep.episode_id,
+          title: ep.title,
+          audioUrl: ep.audio_url,
+          duration: ep.duration,
+        })
+      }
     }
 
     this.initialized = true
@@ -367,6 +385,23 @@ export class ProgressDO extends DurableObject {
         p.lastSessionId,
         p.updatedAt
       ).run()
+      }
+
+      for (const ep of this.episodes) {
+        await this.env.DB.prepare(
+          `INSERT INTO episodes (account_id, episode_id, title, audio_url, duration)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(account_id, episode_id) DO UPDATE SET
+             title = excluded.title,
+             audio_url = excluded.audio_url,
+             duration = excluded.duration`
+        ).bind(
+          accountId,
+          ep.id,
+          ep.title,
+          ep.audioUrl,
+          ep.duration
+        ).run()
       }
     } catch {
       // D1 not available in local dev, use in-memory state
