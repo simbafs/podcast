@@ -24,6 +24,7 @@ export class ProgressDO extends DurableObject {
   private account: AccountState | null = null
   private progress: Map<string, EpisodeProgress> = new Map()
   private initialized = false
+  private req: Request
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -32,16 +33,20 @@ export class ProgressDO extends DurableObject {
   private async init() {
     if (this.initialized) return
 
-    const accountId = this.ctx.id.name
-    const row = await this.env.DB.prepare(
-      'SELECT * FROM accounts WHERE id = ?'
-    ).bind(accountId).first<{
-      id: string
-      active_session_id: string
-      active_device_id: string
-      active_episode_id: string
-      lease_until: number
-    }>()
+    try {
+      const url = new URL(this.req.url)
+      const accountId = url.searchParams.get('accountId') || this.ctx.id.name
+      console.log('init DO for account:', accountId)
+
+      const row = await this.env.DB.prepare(
+        'SELECT * FROM accounts WHERE id = ?'
+      ).bind(accountId).first<{
+        id: string
+        active_session_id: string
+        active_device_id: string
+        active_episode_id: string
+        lease_until: number
+      }>()
 
     if (row) {
       this.account = {
@@ -75,9 +80,13 @@ export class ProgressDO extends DurableObject {
     }
 
     this.initialized = true
+    } catch (e) {
+      console.error('init error:', e)
+    }
   }
 
   async fetch(req: Request): Promise<Response> {
+    this.req = req
     await this.init()
 
     const url = new URL(req.url)

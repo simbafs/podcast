@@ -22,7 +22,7 @@ export function createApp() {
 
     const stub = getDO(c.env, accountId)
     const res = await stub.fetch(
-      new Request('http://localhost/do/state', { method: 'GET' })
+      new Request(`http://localhost/do/state?accountId=${encodeURIComponent(accountId)}`, { method: 'GET' })
     )
     const data = await res.json()
     return c.json(data)
@@ -45,7 +45,7 @@ export function createApp() {
     }
 
     const stub = getDO(c.env, body.accountId)
-    const req = new Request('http://localhost/do/progress', {
+    const req = new Request(`http://localhost/do/progress?accountId=${encodeURIComponent(body.accountId)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -85,7 +85,7 @@ export function createApp() {
     }
 
     const stub = getDO(c.env, body.accountId)
-    const req = new Request('http://localhost/do/transition', {
+    const req = new Request(`http://localhost/do/transition?accountId=${encodeURIComponent(body.accountId)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -117,7 +117,7 @@ export function createApp() {
     }
 
     const stub = getDO(c.env, body.accountId)
-    const req = new Request('http://localhost/do/takeover', {
+    const req = new Request(`http://localhost/do/takeover?accountId=${encodeURIComponent(body.accountId)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

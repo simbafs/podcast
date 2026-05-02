@@ -8,7 +8,7 @@ enabled = true
 [[d1_databases]]
 binding = "DB"
 database_name = "podcast-sync"
-database_id = "put-your-d1-database-id-here"
+database_id = "local"
 
 [[durable_objects.bindings]]
 name = "PROGRESS_DO"
