@@ -149,7 +149,6 @@ body {
 }
 
 .content-section {
-  flex: 1;
 }
 
 .tabs {
@@ -653,6 +652,69 @@ body {
   min-width: 24px;
 }
 
+.feed-input-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.main.has-episodes .feed-input-row {
+  display: none;
+}
+
+.episode-header {
+  display: none;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.main.has-episodes .episode-header {
+  display: flex;
+}
+
+dialog {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  max-width: 400px;
+  width: 90%;
+  color: var(--color-text);
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+dialog h2 {
+  margin-bottom: 1rem;
+}
+
+dialog .input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+dialog .input-group label {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
 @media (max-width: 480px) {
   .add-episode-form {
     flex-direction: column;
@@ -674,5 +736,14 @@ body {
 
   .sidebar {
     width: 100%;
+  }
+
+  .feed-input-row {
+    min-height: 150px;
+    padding: 1rem;
+  }
+
+  .episode-header {
+    flex-wrap: wrap;
   }
 }

@@ -9,12 +9,17 @@ import {
   getEpisodes,
   setEpisodes,
   shouldRefetch,
+  clearAccount,
 } from './lib/storage'
-import { fetchState, generateUUID, Episode, saveFeedUrl } from './lib/api'
+import { fetchState, generateUUID, saveFeedUrl } from './lib/api'
 import { Player } from './lib/player'
 import { parseFeed } from './lib/rss'
 
 let player: Player
+let accountId: string
+let sortOrder: 'asc' | 'desc' = 'desc'
+
+const SORT_ORDER_KEY = 'podcast_sort_order'
 
 type Theme = 'dark' | 'light' | 'system'
 const THEME_KEY = 'podcast-theme'
@@ -83,7 +88,11 @@ function renderEpisodes() {
   if (!list) return
 
   list.innerHTML = ''
-  const episodes = getEpisodes()
+  let episodes = getEpisodes()
+
+  if (sortOrder === 'asc') {
+    episodes = [...episodes].reverse()
+  }
 
   if (episodes.length === 0) {
     list.innerHTML = '<p style="text-align:center;color:var(--color-text-muted);padding:2rem">No episodes. Enter an RSS feed URL above.</p>'
@@ -107,9 +116,17 @@ function renderEpisodes() {
   })
 }
 
-async function loadFeed(url: string, accountId: string) {
+function updateUiState(hasEpisodes: boolean) {
+  const main = document.querySelector('.main')
+  if (hasEpisodes) {
+    main?.classList.add('has-episodes')
+  } else {
+    main?.classList.remove('has-episodes')
+  }
+}
+
+async function loadFeed(url: string, currentAccountId: string) {
   const statusEl = document.getElementById('feed-status')
-  const refetchBtn = document.getElementById('refetch-btn')
 
   statusEl!.textContent = 'Fetching feed...'
 
@@ -119,10 +136,10 @@ async function loadFeed(url: string, accountId: string) {
     setEpisodes(feed.episodes)
     setLastFetchedAt(Date.now())
 
-    await saveFeedUrl(accountId, url)
+    await saveFeedUrl(currentAccountId, url)
 
     statusEl!.textContent = `Loaded ${feed.episodes.length} episodes from "${feed.title}"`
-    refetchBtn?.classList.remove('hidden')
+    updateUiState(true)
     renderEpisodes()
   } catch (e) {
     statusEl!.textContent = `Error: ${e instanceof Error ? e.message : 'Failed to parse feed'}`
@@ -130,20 +147,21 @@ async function loadFeed(url: string, accountId: string) {
 }
 
 async function initApp() {
-  let accountId = getAccountId()
+  accountId = getAccountId() || generateUUID()
+  setAccountId(accountId)
 
-  if (!accountId) {
-    accountId = generateUUID()
-    setAccountId(accountId)
-  }
+  const stored = localStorage.getItem(SORT_ORDER_KEY)
+  sortOrder = (stored === 'asc' || stored === 'desc') ? stored : 'desc'
 
   document.getElementById('device-badge')!.textContent = `Device: ${getDeviceId().slice(0, 8)}`
   initTheme()
 
   const feedInput = document.getElementById('rss-url') as HTMLInputElement
   const fetchBtn = document.getElementById('fetch-feed-btn')
-  const refetchBtn = document.getElementById('refetch-btn')
   const statusEl = document.getElementById('feed-status')
+
+  const settingsDialog = document.getElementById('settings-dialog') as HTMLDialogElement
+  const settingsRssInput = document.getElementById('settings-rss-url') as HTMLInputElement
 
   fetchBtn?.addEventListener('click', async () => {
     const url = feedInput.value.trim()
@@ -151,18 +169,61 @@ async function initApp() {
       statusEl!.textContent = 'Please enter a feed URL'
       return
     }
-    await loadFeed(url, accountId!)
+    await loadFeed(url, accountId)
   })
 
-  refetchBtn?.addEventListener('click', async () => {
+  document.getElementById('refetch-btn')?.addEventListener('click', async () => {
     const currentUrl = getRssUrl()
     if (currentUrl) {
-      await loadFeed(currentUrl, accountId!)
+      await loadFeed(currentUrl, accountId)
+    }
+  })
+
+  document.getElementById('reverse-btn')?.addEventListener('click', () => {
+    sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'
+    localStorage.setItem(SORT_ORDER_KEY, sortOrder)
+    renderEpisodes()
+  })
+
+  document.getElementById('clear-btn')?.addEventListener('click', async () => {
+    setEpisodes([])
+    setRssUrl('')
+    setLastFetchedAt(0)
+    localStorage.removeItem(SORT_ORDER_KEY)
+    sortOrder = 'desc'
+
+    try {
+      await saveFeedUrl(accountId, '')
+    } catch (e) {
+      console.error('Failed to clear feed URL:', e)
+    }
+
+    updateUiState(false)
+    renderEpisodes()
+    feedInput.value = ''
+  })
+
+  document.getElementById('settings-btn')?.addEventListener('click', () => {
+    settingsRssInput.value = getRssUrl() || ''
+    settingsDialog.showModal()
+  })
+
+  document.getElementById('settings-close')?.addEventListener('click', () => {
+    settingsDialog.close()
+  })
+
+  settingsDialog.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const url = settingsRssInput.value.trim()
+    if (url) {
+      feedInput.value = url
+      await loadFeed(url, accountId)
+      settingsDialog.close()
     }
   })
 
   document.getElementById('share-btn')?.addEventListener('click', () => {
-    const link = generateShareLink(accountId!)
+    const link = generateShareLink(accountId)
     if (navigator.clipboard) {
       navigator.clipboard.writeText(link).then(() => {
         const btn = document.getElementById('share-btn')
@@ -202,7 +263,10 @@ async function initApp() {
     const currentId = player?.getCurrentEpisodeId()
     if (!currentId) return
 
-    const episodes = getEpisodes()
+    let episodes = getEpisodes()
+    if (sortOrder === 'asc') {
+      episodes = [...episodes].reverse()
+    }
     const idx = episodes.findIndex((e) => e.id === currentId)
     if (idx > 0) {
       player?.playEpisode(episodes[idx - 1].id)
@@ -213,7 +277,10 @@ async function initApp() {
     const currentId = player?.getCurrentEpisodeId()
     if (!currentId) return
 
-    const episodes = getEpisodes()
+    let episodes = getEpisodes()
+    if (sortOrder === 'asc') {
+      episodes = [...episodes].reverse()
+    }
     const idx = episodes.findIndex((e) => e.id === currentId)
     if (idx < episodes.length - 1) {
       player?.playEpisode(episodes[idx + 1].id)
@@ -232,15 +299,13 @@ async function initApp() {
     if (serverRssUrl) {
       setRssUrl(serverRssUrl)
       feedInput.value = serverRssUrl
-      refetchBtn?.classList.remove('hidden')
 
       if (shouldRefetch()) {
         await loadFeed(serverRssUrl, accountId)
       } else {
         const localEpisodes = getEpisodes()
-        if (localEpisodes.length === 0) {
-          await loadFeed(serverRssUrl, accountId)
-        } else {
+        if (localEpisodes.length > 0) {
+          updateUiState(true)
           renderEpisodes()
         }
       }

@@ -145,7 +145,7 @@ export class ProgressDO extends DurableObject {
       }
     }
 
-    this.account.rssUrl = body.rssUrl
+    this.account.rssUrl = body.rssUrl || null
     await this.persist()
 
     return new Response(JSON.stringify({ rssUrl: this.account.rssUrl }), {
