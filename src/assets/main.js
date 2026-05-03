@@ -42,8 +42,8 @@
     }
     return localStorage.getItem(STORAGE_KEYS.ACCOUNT_ID);
   }
-  function setAccountId(accountId) {
-    localStorage.setItem(STORAGE_KEYS.ACCOUNT_ID, accountId);
+  function setAccountId(accountId2) {
+    localStorage.setItem(STORAGE_KEYS.ACCOUNT_ID, accountId2);
   }
   function getRssUrl() {
     return localStorage.getItem(STORAGE_KEYS.RSS_URL);
@@ -74,8 +74,8 @@
 
   // src/lib/api.ts
   var API_BASE = "";
-  async function fetchState(accountId) {
-    const res = await fetch(`${API_BASE}/api/state?accountId=${encodeURIComponent(accountId)}`);
+  async function fetchState(accountId2) {
+    const res = await fetch(`${API_BASE}/api/state?accountId=${encodeURIComponent(accountId2)}`);
     if (!res.ok) throw new Error("Failed to fetch state");
     return res.json();
   }
@@ -91,11 +91,11 @@
     }
     if (!res.ok) throw new Error("Failed to update progress");
   }
-  async function saveFeedUrl(accountId, rssUrl) {
+  async function saveFeedUrl(accountId2, rssUrl) {
     const res = await fetch(`${API_BASE}/api/feed`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId, rssUrl })
+      body: JSON.stringify({ accountId: accountId2, rssUrl })
     });
     if (!res.ok) throw new Error("Failed to save feed URL");
     return res.json();
@@ -119,9 +119,9 @@
     syncTimer = null;
     seekTimeout = null;
     lastSyncedState = null;
-    constructor(audio, accountId) {
+    constructor(audio, accountId2) {
       this.audio = audio;
-      this.accountId = accountId;
+      this.accountId = accountId2;
       this.audio.addEventListener("timeupdate", () => this.onTimeUpdate());
       this.audio.addEventListener("play", () => this.onPlay());
       this.audio.addEventListener("pause", () => this.onPause());
@@ -410,6 +410,9 @@
 
   // src/main.ts
   var player;
+  var accountId;
+  var sortOrder = "desc";
+  var SORT_ORDER_KEY = "podcast_sort_order";
   var THEME_KEY = "podcast-theme";
   function getStoredTheme() {
     return localStorage.getItem(THEME_KEY) || "dark";
@@ -452,9 +455,9 @@
       }
     });
   }
-  function generateShareLink(accountId) {
+  function generateShareLink(accountId2) {
     const url = new URL(window.location.href);
-    url.searchParams.set("account", accountId);
+    url.searchParams.set("account", accountId2);
     return url.toString();
   }
   function formatDuration(seconds) {
@@ -466,7 +469,10 @@
     const list = document.getElementById("episode-list");
     if (!list) return;
     list.innerHTML = "";
-    const episodes = getEpisodes();
+    let episodes = getEpisodes();
+    if (sortOrder === "asc") {
+      episodes = [...episodes].reverse();
+    }
     if (episodes.length === 0) {
       list.innerHTML = '<p style="text-align:center;color:var(--color-text-muted);padding:2rem">No episodes. Enter an RSS feed URL above.</p>';
       return;
@@ -487,35 +493,42 @@
       list.appendChild(div);
     });
   }
-  async function loadFeed(url, accountId) {
+  function updateUiState(hasEpisodes) {
+    const main = document.querySelector(".main");
+    if (hasEpisodes) {
+      main?.classList.add("has-episodes");
+    } else {
+      main?.classList.remove("has-episodes");
+    }
+  }
+  async function loadFeed(url, currentAccountId) {
     const statusEl = document.getElementById("feed-status");
-    const refetchBtn = document.getElementById("refetch-btn");
     statusEl.textContent = "Fetching feed...";
     try {
       const feed = await parseFeed(url);
       setRssUrl(url);
       setEpisodes(feed.episodes);
       setLastFetchedAt(Date.now());
-      await saveFeedUrl(accountId, url);
+      await saveFeedUrl(currentAccountId, url);
       statusEl.textContent = `Loaded ${feed.episodes.length} episodes from "${feed.title}"`;
-      refetchBtn?.classList.remove("hidden");
+      updateUiState(true);
       renderEpisodes();
     } catch (e) {
       statusEl.textContent = `Error: ${e instanceof Error ? e.message : "Failed to parse feed"}`;
     }
   }
   async function initApp() {
-    let accountId = getAccountId();
-    if (!accountId) {
-      accountId = generateUUID2();
-      setAccountId(accountId);
-    }
+    accountId = getAccountId() || generateUUID2();
+    setAccountId(accountId);
+    const stored = localStorage.getItem(SORT_ORDER_KEY);
+    sortOrder = stored === "asc" || stored === "desc" ? stored : "desc";
     document.getElementById("device-badge").textContent = `Device: ${getDeviceId().slice(0, 8)}`;
     initTheme();
     const feedInput = document.getElementById("rss-url");
     const fetchBtn = document.getElementById("fetch-feed-btn");
-    const refetchBtn = document.getElementById("refetch-btn");
     const statusEl = document.getElementById("feed-status");
+    const settingsDialog = document.getElementById("settings-dialog");
+    const settingsRssInput = document.getElementById("settings-rss-url");
     fetchBtn?.addEventListener("click", async () => {
       const url = feedInput.value.trim();
       if (!url) {
@@ -524,10 +537,46 @@
       }
       await loadFeed(url, accountId);
     });
-    refetchBtn?.addEventListener("click", async () => {
+    document.getElementById("refetch-btn")?.addEventListener("click", async () => {
       const currentUrl = getRssUrl();
       if (currentUrl) {
         await loadFeed(currentUrl, accountId);
+      }
+    });
+    document.getElementById("reverse-btn")?.addEventListener("click", () => {
+      sortOrder = sortOrder === "desc" ? "asc" : "desc";
+      localStorage.setItem(SORT_ORDER_KEY, sortOrder);
+      renderEpisodes();
+    });
+    document.getElementById("clear-btn")?.addEventListener("click", async () => {
+      setEpisodes([]);
+      setRssUrl("");
+      setLastFetchedAt(0);
+      localStorage.removeItem(SORT_ORDER_KEY);
+      sortOrder = "desc";
+      try {
+        await saveFeedUrl(accountId, "");
+      } catch (e) {
+        console.error("Failed to clear feed URL:", e);
+      }
+      updateUiState(false);
+      renderEpisodes();
+      feedInput.value = "";
+    });
+    document.getElementById("settings-btn")?.addEventListener("click", () => {
+      settingsRssInput.value = getRssUrl() || "";
+      settingsDialog.showModal();
+    });
+    document.getElementById("settings-close")?.addEventListener("click", () => {
+      settingsDialog.close();
+    });
+    settingsDialog.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const url = settingsRssInput.value.trim();
+      if (url) {
+        feedInput.value = url;
+        await loadFeed(url, accountId);
+        settingsDialog.close();
       }
     });
     document.getElementById("share-btn")?.addEventListener("click", () => {
@@ -568,7 +617,10 @@
     document.getElementById("prev-btn")?.addEventListener("click", () => {
       const currentId = player?.getCurrentEpisodeId();
       if (!currentId) return;
-      const episodes = getEpisodes();
+      let episodes = getEpisodes();
+      if (sortOrder === "asc") {
+        episodes = [...episodes].reverse();
+      }
       const idx = episodes.findIndex((e) => e.id === currentId);
       if (idx > 0) {
         player?.playEpisode(episodes[idx - 1].id);
@@ -577,7 +629,10 @@
     document.getElementById("next-btn")?.addEventListener("click", () => {
       const currentId = player?.getCurrentEpisodeId();
       if (!currentId) return;
-      const episodes = getEpisodes();
+      let episodes = getEpisodes();
+      if (sortOrder === "asc") {
+        episodes = [...episodes].reverse();
+      }
       const idx = episodes.findIndex((e) => e.id === currentId);
       if (idx < episodes.length - 1) {
         player?.playEpisode(episodes[idx + 1].id);
@@ -593,14 +648,12 @@
       if (serverRssUrl) {
         setRssUrl(serverRssUrl);
         feedInput.value = serverRssUrl;
-        refetchBtn?.classList.remove("hidden");
+        updateUiState(true);
         if (shouldRefetch()) {
           await loadFeed(serverRssUrl, accountId);
         } else {
           const localEpisodes = getEpisodes();
-          if (localEpisodes.length === 0) {
-            await loadFeed(serverRssUrl, accountId);
-          } else {
+          if (localEpisodes.length > 0) {
             renderEpisodes();
           }
         }
@@ -610,9 +663,9 @@
     }
     await initPlayer(accountId);
   }
-  async function initPlayer(accountId) {
+  async function initPlayer(accountId2) {
     const audio = document.getElementById("audio-player");
-    player = new Player(audio, accountId);
+    player = new Player(audio, accountId2);
     await player.init();
     renderEpisodes();
     const currentEpisodeId = player.getCurrentEpisodeId();

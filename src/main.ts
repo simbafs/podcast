@@ -299,13 +299,13 @@ async function initApp() {
     if (serverRssUrl) {
       setRssUrl(serverRssUrl)
       feedInput.value = serverRssUrl
+      updateUiState(true)
 
       if (shouldRefetch()) {
         await loadFeed(serverRssUrl, accountId)
       } else {
         const localEpisodes = getEpisodes()
         if (localEpisodes.length > 0) {
-          updateUiState(true)
           renderEpisodes()
         }
       }
