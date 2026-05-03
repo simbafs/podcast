@@ -1,8 +1,10 @@
 const API_BASE = ''
 
 export interface AccountState {
+  rssUrl: string | null
   activeEpisodeId: string
-  positionSec: number
+  activePositionSec: number
+  activeState: 'playing' | 'paused' | 'ended'
   deviceId: string
   leaseUntil: number
 }
@@ -18,7 +20,6 @@ export interface EpisodeProgress {
 export interface StateResponse {
   account: AccountState | null
   progress: Record<string, EpisodeProgress>
-  episodes: Episode[]
 }
 
 export interface ConflictError {
@@ -58,34 +59,14 @@ export async function updateProgress(body: {
   if (!res.ok) throw new Error('Failed to update progress')
 }
 
-export async function transition(body: {
-  accountId: string
-  sessionId: string
-  deviceId: string
-  from: {
-    episodeId: string
-    positionSec: number
-    state: EpisodeProgress['state']
-  }
-  to: {
-    episodeId: string
-    positionSec: number
-    state: EpisodeProgress['state']
-  }
-  takeover?: boolean
-}): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/playback/transition`, {
+export async function saveFeedUrl(accountId: string, rssUrl: string): Promise<{ rssUrl: string }> {
+  const res = await fetch(`${API_BASE}/api/feed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ accountId, rssUrl }),
   })
-
-  if (res.status === 409) {
-    const conflict: ConflictError = await res.json()
-    throw conflict
-  }
-
-  if (!res.ok) throw new Error('Failed to transition')
+  if (!res.ok) throw new Error('Failed to save feed URL')
+  return res.json()
 }
 
 export function generateUUID(): string {
@@ -96,43 +77,10 @@ export function generateUUID(): string {
   })
 }
 
-export async function takeover(body: {
-  accountId: string
-  sessionId: string
-  deviceId: string
-  episodeId: string
-  positionSec: number
-  state: EpisodeProgress['state']
-}): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/playback/takeover`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) throw new Error('Failed to takeover')
-}
-
 export interface Episode {
   id: string
   title: string
   audioUrl: string
   duration: number
   pubDate?: number
-}
-
-export async function fetchEpisodes(accountId: string): Promise<{ episodes: Episode[] }> {
-  const res = await fetch(`${API_BASE}/api/episodes?accountId=${encodeURIComponent(accountId)}`)
-  if (!res.ok) throw new Error('Failed to fetch episodes')
-  return res.json()
-}
-
-export async function addEpisodes(accountId: string, episodes: Episode[]): Promise<{ episodes: Episode[] }> {
-  const res = await fetch(`${API_BASE}/api/episodes`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ accountId, episodes }),
-  })
-  if (!res.ok) throw new Error('Failed to add episodes')
-  return res.json()
 }

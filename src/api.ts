@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import { getRuntimeKey } from 'hono/adapter'
 
 export interface Env {
   DB: D1Database
@@ -62,16 +61,10 @@ export function createApp() {
     return c.json(data)
   })
 
-  app.post('/api/progress', async (c) => {
+  app.post('/api/feed', async (c) => {
     const body = await c.req.json<{
       accountId: string
-      sessionId: string
-      deviceId: string
-      episodeId: string
-      positionSec: number
-      durationSec?: number
-      state: 'playing' | 'paused' | 'ended'
-      takeover?: boolean
+      rssUrl: string
     }>()
 
     if (!body.accountId) {
@@ -79,116 +72,10 @@ export function createApp() {
     }
 
     const stub = getDO(c.env, body.accountId)
-    const req = new Request(`http://localhost/do/progress?accountId=${encodeURIComponent(body.accountId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-
-    const res = await stub.fetch(req)
-
-    if (res.status === 409) {
-      const conflict = await res.json()
-      return c.json(conflict, 409)
-    }
-
-    const data = await res.json()
-    return c.json(data)
-  })
-
-  app.post('/api/progress', async (c) => {
-    const body = await c.req.json<{
-      accountId: string
-      sessionId: string
-      deviceId: string
-      episodeId: string
-      positionSec: number
-      durationSec?: number
-      state: 'playing' | 'paused' | 'ended'
-      takeover?: boolean
-    }>()
-
-    if (!body.accountId) {
-      return c.json({ error: 'accountId required' }, 400)
-    }
-
-    const stub = getDO(c.env, body.accountId)
-    const req = new Request(`http://localhost/do/progress?accountId=${encodeURIComponent(body.accountId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-
-    const res = await stub.fetch(req)
-
-    if (res.status === 409) {
-      const conflict = await res.json()
-      return c.json(conflict, 409)
-    }
-
-    const data = await res.json()
-    return c.json(data)
-  })
-
-  app.post('/api/playback/transition', async (c) => {
-    const body = await c.req.json<{
-      accountId: string
-      sessionId: string
-      deviceId: string
-      from: {
-        episodeId: string
-        positionSec: number
-        state: 'playing' | 'paused' | 'ended'
-      }
-      to: {
-        episodeId: string
-        positionSec: number
-        state: 'playing' | 'paused' | 'ended'
-      }
-      takeover?: boolean
-    }>()
-
-    if (!body.accountId) {
-      return c.json({ error: 'accountId required' }, 400)
-    }
-
-    const stub = getDO(c.env, body.accountId)
-    const req = new Request(`http://localhost/do/transition?accountId=${encodeURIComponent(body.accountId)}`, {
+    const req = new Request(`http://localhost/do/feed?accountId=${encodeURIComponent(body.accountId)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-
-    const res = await stub.fetch(req)
-
-    if (res.status === 409) {
-      const conflict = await res.json()
-      return c.json(conflict, 409)
-    }
-
-    const data = await res.json()
-    return c.json(data)
-  })
-
-  app.post('/api/playback/takeover', async (c) => {
-    const body = await c.req.json<{
-      accountId: string
-      sessionId: string
-      deviceId: string
-      episodeId: string
-      positionSec: number
-      state: 'playing' | 'paused' | 'ended'
-    }>()
-
-    if (!body.accountId) {
-      return c.json({ error: 'accountId required' }, 400)
-    }
-
-    const stub = getDO(c.env, body.accountId)
-    const req = new Request(`http://localhost/do/takeover?accountId=${encodeURIComponent(body.accountId)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ rssUrl: body.rssUrl }),
     })
 
     const res = await stub.fetch(req)
@@ -196,40 +83,23 @@ export function createApp() {
     return c.json(data)
   })
 
-  app.get('/api/episodes', async (c) => {
-    const accountId = c.req.query('accountId')
-    if (!accountId) {
-      return c.json({ error: 'accountId required' }, 400)
+  app.get('/api/proxy', async (c) => {
+    const url = c.req.query('url')
+    if (!url) {
+      return c.json({ error: 'url required' }, 400)
     }
 
-    const stub = getDO(c.env, accountId)
-    const res = await stub.fetch(
-      new Request(`http://localhost/do/episodes?accountId=${encodeURIComponent(accountId)}`, { method: 'GET' })
-    )
-    const data = await res.json()
-    return c.json(data)
-  })
+    const res = await fetch(url)
+    const contentType = res.headers.get('content-type') || ''
+    const body = await res.text()
 
-  app.post('/api/episodes', async (c) => {
-    const body = await c.req.json<{
-      accountId: string
-      episodes: Array<{ id: string; title: string; audioUrl: string; duration: number }>
-    }>()
-
-    if (!body.accountId) {
-      return c.json({ error: 'accountId required' }, 400)
-    }
-
-    const stub = getDO(c.env, body.accountId)
-    const req = new Request(`http://localhost/do/episodes?accountId=${encodeURIComponent(body.accountId)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ episodes: body.episodes }),
+    return new Response(body, {
+      status: res.status,
+      headers: {
+        'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*',
+      },
     })
-
-    const res = await stub.fetch(req)
-    const data = await res.json()
-    return c.json(data)
   })
 
   app.notFound((c) => c.text('Not Found', 404))

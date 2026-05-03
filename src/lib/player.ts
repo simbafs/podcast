@@ -1,56 +1,21 @@
-import { getAccountId, getDeviceId, getSessionId } from './storage'
-import { fetchState, updateProgress, transition, takeover, ConflictError, addEpisodes, Episode, StateResponse } from './api'
-
-let EPISODES: Episode[] = []
-
-export function setEpisodes(episodes: Episode[]) {
-  EPISODES = episodes
-}
-
-export function getEpisodes(): Episode[] {
-  return EPISODES
-}
-
-export async function addEpisode(episode: Episode, position: 'head' | 'tail' = 'tail') {
-  if (position === 'head') {
-    EPISODES.unshift(episode)
-  } else {
-    EPISODES.push(episode)
-  }
-  const accountId = getAccountId()
-  if (accountId) {
-    try {
-      await addEpisodes(accountId, [episode])
-    } catch (e) {
-      console.error('Failed to save episode:', e)
-    }
-  }
-}
-
-export async function loadEpisodes(accountId: string) {
-  try {
-    const state: StateResponse = await fetchState(accountId)
-    EPISODES = state.episodes || []
-  } catch (e) {
-    console.error('Failed to load episodes:', e)
-    EPISODES = []
-  }
-}
+import { getDeviceId, getSessionId, getEpisodes } from './storage'
+import { fetchState, updateProgress, ConflictError, Episode } from './api'
 
 const SYNC_INTERVAL = 120000
 const SEEK_DEBOUNCE = 5000
 
 export class Player {
   private audio: HTMLAudioElement
+  private accountId: string
   private currentEpisodeId: string | null = null
   private isPlaying = false
   private syncTimer: number | null = null
   private seekTimeout: number | null = null
-  private pendingSeekSec: number | null = null
   private lastSyncedState: { positionSec: number; state: string; key: string } | null = null
 
-  constructor(audio: HTMLAudioElement) {
+  constructor(audio: HTMLAudioElement, accountId: string) {
     this.audio = audio
+    this.accountId = accountId
 
     this.audio.addEventListener('timeupdate', () => this.onTimeUpdate())
     this.audio.addEventListener('play', () => this.onPlay())
@@ -62,125 +27,65 @@ export class Player {
   }
 
   async init() {
-    const accountId = getAccountId()
-    if (!accountId) return
-
     try {
-      const state = await fetchState(accountId)
-      await this.loadState(state)
+      const state = await fetchState(this.accountId)
+      if (state.account?.activeEpisodeId) {
+        const episodes = getEpisodes()
+        const episode = episodes.find((e) => e.id === state.account!.activeEpisodeId)
+        if (episode) {
+          this.currentEpisodeId = episode.id
+          this.audio.src = episode.audioUrl
+          this.audio.currentTime = state.account.activePositionSec || 0
+          this.updateUI()
+        }
+      }
     } catch (e) {
       console.error('Failed to init player:', e)
     }
   }
 
-  private async loadState(state: StateResponse) {
-    if (state.account?.activeEpisodeId) {
-      const episode = EPISODES.find((e) => e.id === state.account!.activeEpisodeId)
-      if (episode) {
-        this.currentEpisodeId = episode.id
-        this.audio.src = episode.audioUrl
-        this.audio.currentTime = state.account.positionSec
-        this.updateUI()
-      }
-    }
-  }
-
   async playEpisode(episodeId: string) {
-    const accountId = getAccountId()
-    if (!accountId) return
-
-    const episode = EPISODES.find((e) => e.id === episodeId)
+    const episodes = getEpisodes()
+    const episode = episodes.find((e) => e.id === episodeId)
     if (!episode) return
 
     const wasPlaying = this.isPlaying
-
-    if (this.currentEpisodeId && this.currentEpisodeId !== episodeId) {
-      const fromState = this.isPlaying ? 'playing' : 'paused'
-      await this.transitionTo(episodeId, fromState)
-      return
-    }
+    const fromEpisodeId = this.currentEpisodeId
+    const fromPositionSec = Math.floor(this.audio.currentTime)
+    const fromState = this.isPlaying ? 'playing' : 'paused'
 
     this.currentEpisodeId = episodeId
     this.audio.src = episode.audioUrl
 
-    const state = await fetchState(accountId)
-    const progress = state.progress[episodeId]
-    if (progress) {
-      this.audio.currentTime = progress.positionSec
+    try {
+      const state = await fetchState(this.accountId)
+      if (state.progress[episodeId]) {
+        this.audio.currentTime = state.progress[episodeId].positionSec
+      }
+    } catch (e) {
+      console.error('Failed to fetch progress:', e)
     }
 
     this.updateUI()
 
+    if (fromEpisodeId && fromEpisodeId !== episodeId) {
+      try {
+        await updateProgress({
+          accountId: this.accountId,
+          sessionId: getSessionId(),
+          deviceId: getDeviceId(),
+          episodeId: fromEpisodeId,
+          positionSec: fromPositionSec,
+          state: fromState,
+        })
+      } catch (e) {
+        console.error('Failed to save previous progress:', e)
+      }
+    }
+
     if (wasPlaying) {
       await this.audio.play()
     }
-  }
-
-  private async transitionTo(newEpisodeId: string, fromState: 'playing' | 'paused' | 'ended') {
-    const accountId = getAccountId()
-    if (!accountId) return
-
-    const sessionId = getSessionId()
-    const deviceId = getDeviceId()
-
-    const fromEpisode = EPISODES.find((e) => e.id === this.currentEpisodeId)
-    const toEpisode = EPISODES.find((e) => e.id === newEpisodeId)
-    if (!fromEpisode || !toEpisode) return
-
-    try {
-      await transition({
-        accountId,
-        sessionId,
-        deviceId,
-        from: {
-          episodeId: fromEpisode.id,
-          positionSec: Math.floor(this.audio.currentTime),
-          state: fromState,
-        },
-        to: {
-          episodeId: toEpisode.id,
-          positionSec: 0,
-          state: 'playing',
-        },
-      })
-
-      this.currentEpisodeId = newEpisodeId
-      this.audio.src = toEpisode.audioUrl
-      this.updateUI()
-      await this.audio.play()
-    } catch (e) {
-      if ((e as ConflictError).error === 'conflict') {
-        this.showConflictModal((e as ConflictError).activeDeviceId)
-      }
-    }
-  }
-
-  private showConflictModal(activeDeviceId: string) {
-    const modal = document.getElementById('conflict-modal')
-    const deviceEl = document.getElementById('conflict-device')
-    if (modal && deviceEl) {
-      deviceEl.textContent = `Device: ${activeDeviceId.slice(0, 8)}...`
-      modal.classList.remove('hidden')
-    }
-  }
-
-  async handleTakeover() {
-    const accountId = getAccountId()
-    if (!accountId || !this.currentEpisodeId) return
-
-    const sessionId = getSessionId()
-    const deviceId = getDeviceId()
-
-    await takeover({
-      accountId,
-      sessionId,
-      deviceId,
-      episodeId: this.currentEpisodeId,
-      positionSec: Math.floor(this.audio.currentTime),
-      state: this.isPlaying ? 'playing' : 'paused',
-    })
-
-    document.getElementById('conflict-modal')?.classList.add('hidden')
   }
 
   toggle() {
@@ -253,8 +158,7 @@ export class Player {
   }
 
   private async syncProgress(stateOverride?: 'playing' | 'paused' | 'ended') {
-    const accountId = getAccountId()
-    if (!accountId || !this.currentEpisodeId) return
+    if (!this.currentEpisodeId) return
 
     const sessionId = getSessionId()
     const deviceId = getDeviceId()
@@ -267,7 +171,7 @@ export class Player {
     try {
       this.setSyncStatus('syncing')
       await updateProgress({
-        accountId,
+        accountId: this.accountId,
         sessionId,
         deviceId,
         episodeId: this.currentEpisodeId,
@@ -279,15 +183,13 @@ export class Player {
       this.setSyncStatus('synced')
     } catch (e) {
       if ((e as ConflictError).error === 'conflict') {
-        this.showConflictModal((e as ConflictError).activeDeviceId)
-        this.setSyncStatus('error')
+        this.setSyncStatus('synced')
       }
     }
   }
 
   private async syncBeforeUnload() {
-    const accountId = getAccountId()
-    if (!accountId || !this.currentEpisodeId) return
+    if (!this.currentEpisodeId) return
 
     const sessionId = getSessionId()
     const deviceId = getDeviceId()
@@ -295,7 +197,7 @@ export class Player {
     const state = this.isPlaying ? 'playing' : 'paused'
 
     const body = JSON.stringify({
-      accountId,
+      accountId: this.accountId,
       sessionId,
       deviceId,
       episodeId: this.currentEpisodeId,
@@ -309,11 +211,11 @@ export class Player {
   private updateUI() {
     if (!this.currentEpisodeId) return
 
-    const episode = EPISODES.find((e) => e.id === this.currentEpisodeId)
+    const episodes = getEpisodes()
+    const episode = episodes.find((e) => e.id === this.currentEpisodeId)
     if (!episode) return
 
     document.getElementById('now-playing-title')!.textContent = episode.title
-    document.getElementById('now-playing-episode')!.textContent = `Episode ${episode.id.replace('ep', '')}`
 
     document.querySelectorAll('.episode-item').forEach((el) => {
       el.classList.toggle('active', el.getAttribute('data-episode') === this.currentEpisodeId)

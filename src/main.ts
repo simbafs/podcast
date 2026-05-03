@@ -1,6 +1,17 @@
-import { getAccountId, getDeviceId, setAccountId, clearAccount, getSessionId } from './lib/storage'
-import { fetchState, generateUUID, Episode, addEpisodes as addEpisodesApi } from './lib/api'
-import { Player, getEpisodes, addEpisode, loadEpisodes, setEpisodes } from './lib/player'
+import {
+  getAccountId,
+  getDeviceId,
+  setAccountId,
+  getRssUrl,
+  setRssUrl,
+  getLastFetchedAt,
+  setLastFetchedAt,
+  getEpisodes,
+  setEpisodes,
+  shouldRefetch,
+} from './lib/storage'
+import { fetchState, generateUUID, Episode, saveFeedUrl } from './lib/api'
+import { Player } from './lib/player'
 import { parseFeed } from './lib/rss'
 
 let player: Player
@@ -61,50 +72,125 @@ function generateShareLink(accountId: string): string {
   return url.toString()
 }
 
-async function initApp() {
-  const accountId = getAccountId()
-  const deviceId = getDeviceId()
-  const urlParams = new URLSearchParams(window.location.search)
-  const urlAccountId = urlParams.get('account')
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
 
-  document.getElementById('device-badge')!.textContent = `Device: ${deviceId.slice(0, 8)}`
+function renderEpisodes() {
+  const list = document.getElementById('episode-list')
+  if (!list) return
+
+  list.innerHTML = ''
+  const episodes = getEpisodes()
+
+  if (episodes.length === 0) {
+    list.innerHTML = '<p style="text-align:center;color:var(--color-text-muted);padding:2rem">No episodes. Enter an RSS feed URL above.</p>'
+    return
+  }
+
+  episodes.forEach((ep) => {
+    const div = document.createElement('div')
+    div.className = 'episode-item'
+    div.setAttribute('data-episode', ep.id)
+    div.innerHTML = `
+      <div class="episode-info">
+        <span class="episode-title">${ep.title}</span>
+      </div>
+      <span class="episode-duration">${formatDuration(ep.duration)}</span>
+    `
+    div.addEventListener('click', () => {
+      player?.playEpisode(ep.id)
+    })
+    list.appendChild(div)
+  })
+}
+
+async function loadFeed(url: string, accountId: string) {
+  const statusEl = document.getElementById('feed-status')
+  const refetchBtn = document.getElementById('refetch-btn')
+
+  statusEl!.textContent = 'Fetching feed...'
+
+  try {
+    const feed = await parseFeed(url)
+    setRssUrl(url)
+    setEpisodes(feed.episodes)
+    setLastFetchedAt(Date.now())
+
+    await saveFeedUrl(accountId, url)
+
+    statusEl!.textContent = `Loaded ${feed.episodes.length} episodes from "${feed.title}"`
+    refetchBtn?.classList.remove('hidden')
+    renderEpisodes()
+  } catch (e) {
+    statusEl!.textContent = `Error: ${e instanceof Error ? e.message : 'Failed to parse feed'}`
+  }
+}
+
+async function initApp() {
+  let accountId = getAccountId()
+
+  if (!accountId) {
+    accountId = generateUUID()
+    setAccountId(accountId)
+  }
+
+  document.getElementById('device-badge')!.textContent = `Device: ${getDeviceId().slice(0, 8)}`
   initTheme()
 
-  if (urlAccountId && urlAccountId !== accountId) {
-    setAccountId(urlAccountId)
-    window.history.replaceState({}, '', window.location.pathname)
-  }
+  const feedInput = document.getElementById('rss-url') as HTMLInputElement
+  const fetchBtn = document.getElementById('fetch-feed-btn')
+  const refetchBtn = document.getElementById('refetch-btn')
+  const statusEl = document.getElementById('feed-status')
 
-  const currentAccountId = getAccountId()
+  fetchBtn?.addEventListener('click', async () => {
+    const url = feedInput.value.trim()
+    if (!url) {
+      statusEl!.textContent = 'Please enter a feed URL'
+      return
+    }
+    await loadFeed(url, accountId!)
+  })
 
-  if (currentAccountId) {
-    showAccountInfo(currentAccountId)
-    await initPlayer(currentAccountId)
-  } else {
-    showNoAccount()
-  }
-
-  initSidebar()
-
-  document.getElementById('create-account-btn')?.addEventListener('click', async () => {
-    const newAccountId = generateUUID()
-    setAccountId(newAccountId)
-    showAccountInfo(newAccountId)
-    await initPlayer(newAccountId)
+  refetchBtn?.addEventListener('click', async () => {
+    const currentUrl = getRssUrl()
+    if (currentUrl) {
+      await loadFeed(currentUrl, accountId!)
+    }
   })
 
   document.getElementById('share-btn')?.addEventListener('click', () => {
-    const accountId = getAccountId()
-    if (accountId) {
-      const link = generateShareLink(accountId)
+    const link = generateShareLink(accountId!)
+    if (navigator.clipboard) {
       navigator.clipboard.writeText(link).then(() => {
         const btn = document.getElementById('share-btn')
         if (btn) {
-          const origText = btn.textContent
-          btn.textContent = 'Copied!'
-          setTimeout(() => (btn.textContent = origText), 2000)
+          const origText = btn.innerHTML
+          btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+          setTimeout(() => (btn.innerHTML = origText), 2000)
         }
       })
+    } else {
+      const textArea = document.createElement('textarea')
+      textArea.value = link
+      textArea.style.position = 'fixed'
+      textArea.style.left = '-9999px'
+      document.body.appendChild(textArea)
+      textArea.select()
+      try {
+        document.execCommand('copy')
+        const btn = document.getElementById('share-btn')
+        if (btn) {
+          const origText = btn.innerHTML
+          btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+          setTimeout(() => (btn.innerHTML = origText), 2000)
+        }
+      } catch {
+        alert(`Share link: ${link}`)
+      }
+      document.body.removeChild(textArea)
     }
   })
 
@@ -134,289 +220,41 @@ async function initApp() {
     }
   })
 
-  document.querySelectorAll('.episode-item').forEach((el) => {
-    el.addEventListener('click', () => {
-      const episodeId = el.getAttribute('data-episode')
-      if (episodeId) {
-        player?.playEpisode(episodeId)
-      }
-    })
-  })
-
   document.getElementById('progress-slider')?.addEventListener('input', (e) => {
     const value = parseFloat((e.target as HTMLInputElement).value)
     player?.seek(value)
   })
 
-  document.getElementById('cancel-conflict')?.addEventListener('click', () => {
-    document.getElementById('conflict-modal')?.classList.add('hidden')
-  })
+  try {
+    const state = await fetchState(accountId)
+    const serverRssUrl = state.account?.rssUrl || null
 
-  document.getElementById('takeover-btn')?.addEventListener('click', () => {
-    player?.handleTakeover()
-  })
-}
+    if (serverRssUrl) {
+      setRssUrl(serverRssUrl)
+      feedInput.value = serverRssUrl
+      refetchBtn?.classList.remove('hidden')
 
-function showAccountInfo(accountId: string) {
-  document.getElementById('account-info')?.classList.remove('hidden')
-  document.getElementById('no-account')?.classList.add('hidden')
-}
-
-function showNoAccount() {
-  document.getElementById('account-info')?.classList.add('hidden')
-  document.getElementById('no-account')?.classList.remove('hidden')
-}
-
-function renderEpisodes() {
-  const list = document.getElementById('episode-list')
-  if (!list) return
-
-  list.innerHTML = ''
-  const episodes = getEpisodes()
-
-  if (episodes.length === 0) {
-    list.innerHTML = '<p style="text-align:center;color:var(--color-text-muted);padding:2rem">No episodes yet</p>'
-    return
-  }
-
-  episodes.forEach((ep) => {
-    const div = document.createElement('div')
-    div.className = 'episode-item'
-    div.setAttribute('data-episode', ep.id)
-    div.innerHTML = `
-      <div class="episode-info">
-        <span class="episode-title">${ep.title}</span>
-      </div>
-      <span class="episode-duration">${formatDuration(ep.duration)}</span>
-    `
-    div.addEventListener('click', () => {
-      player?.playEpisode(ep.id)
-    })
-    list.appendChild(div)
-  })
-}
-
-function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-}
-
-let feedPreviewEpisodes: Episode[] = []
-let selectedFeedPosition: 'head' | 'tail' = 'tail'
-let selectedFeedOrder: 'asc' | 'desc' = 'asc'
-let selectedSinglePosition: 'head' | 'tail' = 'tail'
-
-function initSidebar() {
-  const addBtn = document.getElementById('add-btn')
-  const sidebar = document.getElementById('sidebar')
-  const overlay = document.getElementById('sidebar-overlay')
-  const closeBtn = document.getElementById('sidebar-close')
-  const tabSingle = document.getElementById('sidebar-tab-single')
-  const tabFeed = document.getElementById('sidebar-tab-feed')
-  const singleContent = document.getElementById('sidebar-single')
-  const feedContent = document.getElementById('sidebar-feed')
-
-  function openSidebar() {
-    sidebar?.classList.add('open')
-    overlay?.classList.remove('hidden')
-    overlay?.classList.add('open')
-    document.body.style.overflow = 'hidden'
-    document.querySelector('main')?.setAttribute('inert', '')
-    document.querySelector('header')?.setAttribute('inert', '')
-  }
-
-  function closeSidebar() {
-    sidebar?.classList.remove('open')
-    overlay?.classList.add('hidden')
-    overlay?.classList.remove('open')
-    document.body.style.overflow = ''
-    document.querySelector('main')?.removeAttribute('inert')
-    document.querySelector('header')?.removeAttribute('inert')
-  }
-
-  addBtn?.addEventListener('click', openSidebar)
-  closeBtn?.addEventListener('click', closeSidebar)
-  overlay?.addEventListener('click', closeSidebar)
-
-  tabSingle?.addEventListener('click', () => {
-    tabSingle.classList.add('active')
-    tabFeed?.classList.remove('active')
-    singleContent?.classList.remove('hidden')
-    feedContent?.classList.add('hidden')
-  })
-
-  tabFeed?.addEventListener('click', () => {
-    tabFeed.classList.add('active')
-    tabSingle?.classList.remove('active')
-    feedContent?.classList.remove('hidden')
-    singleContent?.classList.add('hidden')
-  })
-
-  const singleBtns = document.querySelectorAll('#sidebar-single .position-btn')
-  singleBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      singleBtns.forEach((b) => b.classList.remove('active'))
-      btn.classList.add('active')
-      selectedSinglePosition = (btn as HTMLElement).dataset.position as 'head' | 'tail'
-    })
-  })
-
-  const addSingleBtn = document.getElementById('sidebar-add-single')
-  addSingleBtn?.addEventListener('click', () => {
-    const titleInput = document.getElementById('sidebar-episode-title') as HTMLInputElement
-    const urlInput = document.getElementById('sidebar-episode-url') as HTMLInputElement
-    const durationInput = document.getElementById('sidebar-episode-duration') as HTMLInputElement
-
-    const title = titleInput.value.trim()
-    const url = urlInput.value.trim()
-    const duration = parseInt(durationInput.value, 10)
-
-    if (!title || !url || isNaN(duration)) {
-      alert('Please fill in all fields')
-      return
-    }
-
-    const episode: Episode = {
-      id: generateUUID(),
-      title,
-      audioUrl: url,
-      duration,
-    }
-
-    addEpisode(episode, selectedSinglePosition)
-    renderEpisodes()
-
-    titleInput.value = ''
-    urlInput.value = ''
-    durationInput.value = ''
-
-    showImportStatus(`Added "${title}" to ${selectedSinglePosition === 'head' ? 'beginning' : 'end'} of queue`)
-  })
-
-  const fetchFeedBtn = document.getElementById('sidebar-fetch-feed')
-  const feedPreview = document.getElementById('sidebar-feed-preview')
-  const feedStatus = document.getElementById('sidebar-feed-status')
-  const feedEpisodeList = document.getElementById('sidebar-episode-list')
-
-  fetchFeedBtn?.addEventListener('click', async () => {
-    const urlInput = document.getElementById('sidebar-feed-url') as HTMLInputElement
-    const url = urlInput.value.trim()
-
-    if (!url) {
-      feedStatus!.textContent = 'Please enter a feed URL'
-      return
-    }
-
-    feedStatus!.textContent = 'Fetching feed...'
-    feedPreview?.classList.add('hidden')
-
-    try {
-      const feed = await parseFeed(url)
-      feedPreviewEpisodes = feed.episodes
-      feedStatus!.textContent = `Found ${feed.episodes.length} episodes from "${feed.title}"`
-      renderFeedPreview()
-      feedPreview?.classList.remove('hidden')
-    } catch (e) {
-      feedStatus!.textContent = `Error: ${e instanceof Error ? e.message : 'Failed to parse feed'}`
-    }
-  })
-
-  const feedPositionBtns = document.querySelectorAll('#sidebar-feed .position-btn')
-  feedPositionBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      feedPositionBtns.forEach((b) => b.classList.remove('active'))
-      btn.classList.add('active')
-      selectedFeedPosition = (btn as HTMLElement).dataset.position as 'head' | 'tail'
-    })
-  })
-
-  const sortBtns = document.querySelectorAll('.sort-btn')
-  sortBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      sortBtns.forEach((b) => b.classList.remove('active'))
-      btn.classList.add('active')
-      selectedFeedOrder = (btn as HTMLElement).dataset.order as 'asc' | 'desc'
-      renderFeedPreview()
-    })
-  })
-
-  function renderFeedPreview() {
-    const feedEpisodeList = document.getElementById('sidebar-episode-list')
-    if (!feedEpisodeList) return
-
-    const episodes = [...feedPreviewEpisodes]
-    if (selectedFeedOrder === 'asc') {
-      episodes.sort((a, b) => (a.pubDate || 0) - (b.pubDate || 0))
-    } else {
-      episodes.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0))
-    }
-
-    feedEpisodeList.innerHTML = ''
-    episodes.forEach((ep, idx) => {
-      const div = document.createElement('div')
-      div.className = 'feed-episode-item'
-      div.innerHTML = `
-        <span class="feed-episode-number">${idx + 1}.</span>
-        <span class="episode-title">${ep.title}</span>
-        <span class="episode-duration">${formatDuration(ep.duration)}</span>
-      `
-      feedEpisodeList.appendChild(div)
-    })
-  }
-
-  const addFeedBtn = document.getElementById('sidebar-add-feed')
-  addFeedBtn?.addEventListener('click', async () => {
-    if (feedPreviewEpisodes.length === 0) {
-      alert('No episodes to add. Please fetch a feed first.')
-      return
-    }
-
-    const episodes = [...feedPreviewEpisodes]
-    if (selectedFeedOrder === 'desc') {
-      episodes.reverse()
-    }
-
-    const position = selectedFeedPosition
-    for (const ep of episodes) {
-      await addEpisode(ep, position)
-    }
-
-    renderEpisodes()
-
-    const accountId = getAccountId()
-    if (accountId && episodes.length > 0) {
-      try {
-        await addEpisodesApi(accountId, episodes)
-      } catch (e) {
-        console.error('Failed to save episodes:', e)
+      if (shouldRefetch()) {
+        await loadFeed(serverRssUrl, accountId)
+      } else {
+        const localEpisodes = getEpisodes()
+        if (localEpisodes.length === 0) {
+          await loadFeed(serverRssUrl, accountId)
+        } else {
+          renderEpisodes()
+        }
       }
     }
-
-    feedPreviewEpisodes = []
-    feedPreview?.classList.add('hidden')
-    const urlInput = document.getElementById('sidebar-feed-url') as HTMLInputElement
-    urlInput.value = ''
-
-    showImportStatus(`Added ${episodes.length} episodes to ${position === 'head' ? 'beginning' : 'end'} of queue`)
-    closeSidebar()
-  })
-}
-
-function showImportStatus(message: string) {
-  const status = document.getElementById('import-status')
-  if (status) {
-    status.textContent = message
-    setTimeout(() => {
-      status.textContent = ''
-    }, 3000)
+  } catch (e) {
+    console.error('Failed to fetch state:', e)
   }
+
+  await initPlayer(accountId)
 }
 
 async function initPlayer(accountId: string) {
-  await loadEpisodes(accountId)
   const audio = document.getElementById('audio-player') as HTMLAudioElement
-  player = new Player(audio)
+  player = new Player(audio, accountId)
   await player.init()
   renderEpisodes()
 

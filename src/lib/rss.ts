@@ -9,9 +9,18 @@ export interface ParsedPodcast {
 }
 
 export async function parseFeed(url: string): Promise<ParsedPodcast> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch feed: ${response.status}`)
+  let response: Response
+
+  try {
+    response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch feed: ${response.status}`)
+    }
+  } catch {
+    response = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch feed: ${response.status}`)
+    }
   }
 
   const text = await response.text()
@@ -38,7 +47,17 @@ export async function parseFeed(url: string): Promise<ParsedPodcast> {
 
   for (const item of items) {
     const epTitle = item.querySelector('title')?.textContent || 'Untitled'
-    const epUrl = item.querySelector('enclosure')?.getAttribute('url') || ''
+    const enclosure = item.querySelector('enclosure')
+    const audioUrl = enclosure?.getAttribute('url') || ''
+
+    const guidEl = item.querySelector('guid')
+    let id = guidEl?.textContent || ''
+    if (!id) {
+      id = audioUrl
+    }
+    if (!id) {
+      id = generateUUID()
+    }
 
     let duration = 0
     const durationStr = item.querySelector('itunes\\:duration, duration')?.textContent
@@ -52,11 +71,11 @@ export async function parseFeed(url: string): Promise<ParsedPodcast> {
       pubDate = new Date(pubDateStr).getTime()
     }
 
-    if (epUrl) {
+    if (audioUrl) {
       episodes.push({
-        id: generateUUID(),
+        id,
         title: epTitle,
-        audioUrl: epUrl,
+        audioUrl,
         duration,
         pubDate,
       })
