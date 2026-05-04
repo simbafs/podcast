@@ -9,7 +9,8 @@ import {
   getEpisodes,
   setEpisodes,
   shouldRefetch,
-  clearAccount,
+  getOrder,
+  setOrder,
 } from './lib/storage'
 import { fetchState, generateUUID, saveFeedUrl } from './lib/api'
 import { Player } from './lib/player'
@@ -17,9 +18,6 @@ import { parseFeed } from './lib/rss'
 
 let player: Player
 let accountId: string
-let sortOrder: 'asc' | 'desc' = 'desc'
-
-const SORT_ORDER_KEY = 'podcast_sort_order'
 
 type Theme = 'dark' | 'light' | 'system'
 const THEME_KEY = 'podcast-theme'
@@ -88,10 +86,13 @@ function renderEpisodes() {
   if (!list) return
 
   list.innerHTML = ''
-  let episodes = getEpisodes()
+  let episodes = [...getEpisodes()]
 
-  if (sortOrder === 'asc') {
-    episodes = [...episodes].reverse()
+  const order = getOrder()
+  if (order === 'new-to-old') {
+    episodes.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0))
+  } else {
+    episodes.sort((a, b) => (a.pubDate || 0) - (b.pubDate || 0))
   }
 
   if (episodes.length === 0) {
@@ -150,9 +151,6 @@ async function initApp() {
   accountId = getAccountId() || generateUUID()
   setAccountId(accountId)
 
-  const stored = localStorage.getItem(SORT_ORDER_KEY)
-  sortOrder = (stored === 'asc' || stored === 'desc') ? stored : 'desc'
-
   document.getElementById('device-badge')!.textContent = `Device: ${getDeviceId().slice(0, 8)}`
   initTheme()
 
@@ -179,9 +177,27 @@ async function initApp() {
     }
   })
 
-  document.getElementById('reverse-btn')?.addEventListener('click', () => {
-    sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'
-    localStorage.setItem(SORT_ORDER_KEY, sortOrder)
+  document.getElementById('reverse-btn')?.addEventListener('click', async () => {
+    const currentOrder = getOrder()
+    const newOrder = currentOrder === 'new-to-old' ? 'old-to-new' : 'new-to-old'
+    setOrder(newOrder)
+    try {
+      await saveFeedUrl(accountId, getRssUrl() || '', newOrder)
+    } catch (e) {
+      console.error('Failed to sync order:', e)
+    }
+    renderEpisodes()
+  })
+
+  document.getElementById('episode-reverse-btn')?.addEventListener('click', async () => {
+    const currentOrder = getOrder()
+    const newOrder = currentOrder === 'new-to-old' ? 'old-to-new' : 'new-to-old'
+    setOrder(newOrder)
+    try {
+      await saveFeedUrl(accountId, getRssUrl() || '', newOrder)
+    } catch (e) {
+      console.error('Failed to sync order:', e)
+    }
     renderEpisodes()
   })
 
@@ -189,11 +205,10 @@ async function initApp() {
     setEpisodes([])
     setRssUrl('')
     setLastFetchedAt(0)
-    localStorage.removeItem(SORT_ORDER_KEY)
-    sortOrder = 'desc'
+    setOrder('old-to-new')
 
     try {
-      await saveFeedUrl(accountId, '')
+      await saveFeedUrl(accountId, '', 'old-to-new')
     } catch (e) {
       console.error('Failed to clear feed URL:', e)
     }
@@ -263,9 +278,12 @@ async function initApp() {
     const currentId = player?.getCurrentEpisodeId()
     if (!currentId) return
 
-    let episodes = getEpisodes()
-    if (sortOrder === 'asc') {
-      episodes = [...episodes].reverse()
+    let episodes = [...getEpisodes()]
+    const order = getOrder()
+    if (order === 'new-to-old') {
+      episodes.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0))
+    } else {
+      episodes.sort((a, b) => (a.pubDate || 0) - (b.pubDate || 0))
     }
     const idx = episodes.findIndex((e) => e.id === currentId)
     if (idx > 0) {
@@ -277,9 +295,12 @@ async function initApp() {
     const currentId = player?.getCurrentEpisodeId()
     if (!currentId) return
 
-    let episodes = getEpisodes()
-    if (sortOrder === 'asc') {
-      episodes = [...episodes].reverse()
+    let episodes = [...getEpisodes()]
+    const order = getOrder()
+    if (order === 'new-to-old') {
+      episodes.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0))
+    } else {
+      episodes.sort((a, b) => (a.pubDate || 0) - (b.pubDate || 0))
     }
     const idx = episodes.findIndex((e) => e.id === currentId)
     if (idx < episodes.length - 1) {
@@ -295,6 +316,8 @@ async function initApp() {
   try {
     const state = await fetchState(accountId)
     const serverRssUrl = state.account?.rssUrl || null
+    const serverOrder = state.account?.order || 'old-to-new'
+    setOrder(serverOrder)
 
     if (serverRssUrl) {
       setRssUrl(serverRssUrl)

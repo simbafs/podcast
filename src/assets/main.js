@@ -7,7 +7,8 @@
     SESSION_ID: "podcast_session_id",
     RSS_URL: "podcast_rss_url",
     LAST_FETCHED_AT: "podcast_last_fetched_at",
-    EPISODES: "podcast_episodes"
+    EPISODES: "podcast_episodes",
+    ORDER: "podcast_order"
   };
   function generateUUID() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -71,6 +72,13 @@
     const DAY_MS = 24 * 60 * 60 * 1e3;
     return Date.now() - lastFetched > DAY_MS;
   }
+  function getOrder() {
+    const val = localStorage.getItem(STORAGE_KEYS.ORDER);
+    return val === "new-to-old" || val === "old-to-new" ? val : "old-to-new";
+  }
+  function setOrder(order) {
+    localStorage.setItem(STORAGE_KEYS.ORDER, order);
+  }
 
   // src/lib/api.ts
   var API_BASE = "";
@@ -91,11 +99,11 @@
     }
     if (!res.ok) throw new Error("Failed to update progress");
   }
-  async function saveFeedUrl(accountId2, rssUrl) {
+  async function saveFeedUrl(accountId2, rssUrl, order) {
     const res = await fetch(`${API_BASE}/api/feed`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId: accountId2, rssUrl })
+      body: JSON.stringify({ accountId: accountId2, rssUrl, order })
     });
     if (!res.ok) throw new Error("Failed to save feed URL");
     return res.json();
@@ -411,8 +419,6 @@
   // src/main.ts
   var player;
   var accountId;
-  var sortOrder = "desc";
-  var SORT_ORDER_KEY = "podcast_sort_order";
   var THEME_KEY = "podcast-theme";
   function getStoredTheme() {
     return localStorage.getItem(THEME_KEY) || "dark";
@@ -469,9 +475,12 @@
     const list = document.getElementById("episode-list");
     if (!list) return;
     list.innerHTML = "";
-    let episodes = getEpisodes();
-    if (sortOrder === "asc") {
-      episodes = [...episodes].reverse();
+    let episodes = [...getEpisodes()];
+    const order = getOrder();
+    if (order === "new-to-old") {
+      episodes.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0));
+    } else {
+      episodes.sort((a, b) => (a.pubDate || 0) - (b.pubDate || 0));
     }
     if (episodes.length === 0) {
       list.innerHTML = '<p style="text-align:center;color:var(--color-text-muted);padding:2rem">No episodes. Enter an RSS feed URL above.</p>';
@@ -520,8 +529,6 @@
   async function initApp() {
     accountId = getAccountId() || generateUUID2();
     setAccountId(accountId);
-    const stored = localStorage.getItem(SORT_ORDER_KEY);
-    sortOrder = stored === "asc" || stored === "desc" ? stored : "desc";
     document.getElementById("device-badge").textContent = `Device: ${getDeviceId().slice(0, 8)}`;
     initTheme();
     const feedInput = document.getElementById("rss-url");
@@ -543,19 +550,35 @@
         await loadFeed(currentUrl, accountId);
       }
     });
-    document.getElementById("reverse-btn")?.addEventListener("click", () => {
-      sortOrder = sortOrder === "desc" ? "asc" : "desc";
-      localStorage.setItem(SORT_ORDER_KEY, sortOrder);
+    document.getElementById("reverse-btn")?.addEventListener("click", async () => {
+      const currentOrder = getOrder();
+      const newOrder = currentOrder === "new-to-old" ? "old-to-new" : "new-to-old";
+      setOrder(newOrder);
+      try {
+        await saveFeedUrl(accountId, getRssUrl() || "", newOrder);
+      } catch (e) {
+        console.error("Failed to sync order:", e);
+      }
+      renderEpisodes();
+    });
+    document.getElementById("episode-reverse-btn")?.addEventListener("click", async () => {
+      const currentOrder = getOrder();
+      const newOrder = currentOrder === "new-to-old" ? "old-to-new" : "new-to-old";
+      setOrder(newOrder);
+      try {
+        await saveFeedUrl(accountId, getRssUrl() || "", newOrder);
+      } catch (e) {
+        console.error("Failed to sync order:", e);
+      }
       renderEpisodes();
     });
     document.getElementById("clear-btn")?.addEventListener("click", async () => {
       setEpisodes([]);
       setRssUrl("");
       setLastFetchedAt(0);
-      localStorage.removeItem(SORT_ORDER_KEY);
-      sortOrder = "desc";
+      setOrder("old-to-new");
       try {
-        await saveFeedUrl(accountId, "");
+        await saveFeedUrl(accountId, "", "old-to-new");
       } catch (e) {
         console.error("Failed to clear feed URL:", e);
       }
@@ -617,9 +640,12 @@
     document.getElementById("prev-btn")?.addEventListener("click", () => {
       const currentId = player?.getCurrentEpisodeId();
       if (!currentId) return;
-      let episodes = getEpisodes();
-      if (sortOrder === "asc") {
-        episodes = [...episodes].reverse();
+      let episodes = [...getEpisodes()];
+      const order = getOrder();
+      if (order === "new-to-old") {
+        episodes.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0));
+      } else {
+        episodes.sort((a, b) => (a.pubDate || 0) - (b.pubDate || 0));
       }
       const idx = episodes.findIndex((e) => e.id === currentId);
       if (idx > 0) {
@@ -629,9 +655,12 @@
     document.getElementById("next-btn")?.addEventListener("click", () => {
       const currentId = player?.getCurrentEpisodeId();
       if (!currentId) return;
-      let episodes = getEpisodes();
-      if (sortOrder === "asc") {
-        episodes = [...episodes].reverse();
+      let episodes = [...getEpisodes()];
+      const order = getOrder();
+      if (order === "new-to-old") {
+        episodes.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0));
+      } else {
+        episodes.sort((a, b) => (a.pubDate || 0) - (b.pubDate || 0));
       }
       const idx = episodes.findIndex((e) => e.id === currentId);
       if (idx < episodes.length - 1) {
@@ -645,6 +674,8 @@
     try {
       const state = await fetchState(accountId);
       const serverRssUrl = state.account?.rssUrl || null;
+      const serverOrder = state.account?.order || "old-to-new";
+      setOrder(serverOrder);
       if (serverRssUrl) {
         setRssUrl(serverRssUrl);
         feedInput.value = serverRssUrl;

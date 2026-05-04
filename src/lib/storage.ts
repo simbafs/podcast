@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   RSS_URL: 'podcast_rss_url',
   LAST_FETCHED_AT: 'podcast_last_fetched_at',
   EPISODES: 'podcast_episodes',
+  ORDER: 'podcast_order',
 } as const
 
 function generateUUID(): string {
@@ -89,4 +90,13 @@ export function shouldRefetch(): boolean {
   if (!lastFetched) return false
   const DAY_MS = 24 * 60 * 60 * 1000
   return Date.now() - lastFetched > DAY_MS
+}
+
+export function getOrder(): 'new-to-old' | 'old-to-new' {
+  const val = localStorage.getItem(STORAGE_KEYS.ORDER)
+  return (val === 'new-to-old' || val === 'old-to-new') ? val : 'old-to-new'
+}
+
+export function setOrder(order: 'new-to-old' | 'old-to-new'): void {
+  localStorage.setItem(STORAGE_KEYS.ORDER, order)
 }

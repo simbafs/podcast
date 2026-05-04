@@ -2,6 +2,7 @@ const API_BASE = ''
 
 export interface AccountState {
   rssUrl: string | null
+  order: 'new-to-old' | 'old-to-new'
   activeEpisodeId: string
   activePositionSec: number
   activeState: 'playing' | 'paused' | 'ended'
@@ -59,11 +60,11 @@ export async function updateProgress(body: {
   if (!res.ok) throw new Error('Failed to update progress')
 }
 
-export async function saveFeedUrl(accountId: string, rssUrl: string): Promise<{ rssUrl: string }> {
+export async function saveFeedUrl(accountId: string, rssUrl: string, order?: 'new-to-old' | 'old-to-new'): Promise<{ rssUrl: string; order: string }> {
   const res = await fetch(`${API_BASE}/api/feed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ accountId, rssUrl }),
+    body: JSON.stringify({ accountId, rssUrl, order }),
   })
   if (!res.ok) throw new Error('Failed to save feed URL')
   return res.json()

@@ -4,6 +4,7 @@
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     rss_url TEXT,
+    order TEXT DEFAULT 'old-to-new',
     active_session_id TEXT,
     active_device_id TEXT,
     active_episode_id TEXT,

@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers'
 
 export interface AccountState {
   rssUrl: string | null
+  order: 'new-to-old' | 'old-to-new'
   activeSessionId: string
   activeDeviceId: string
   activeEpisodeId: string
@@ -50,6 +51,7 @@ export class ProgressDO extends DurableObject {
       ).bind(accountId).first<{
         id: string
         rss_url: string | null
+        order: string
         active_session_id: string
         active_device_id: string
         active_episode_id: string
@@ -61,6 +63,7 @@ export class ProgressDO extends DurableObject {
       if (row) {
         this.account = {
           rssUrl: row.rss_url,
+          order: (row.order || 'old-to-new') as AccountState['order'],
           activeSessionId: row.active_session_id,
           activeDeviceId: row.active_device_id,
           activeEpisodeId: row.active_episode_id,
@@ -131,11 +134,12 @@ export class ProgressDO extends DurableObject {
   }
 
   private async handleFeed(req: Request): Promise<Response> {
-    const body = await req.json<{ rssUrl: string }>()
+    const body = await req.json<{ rssUrl: string; order?: 'new-to-old' | 'old-to-new' }>()
 
     if (!this.account) {
       this.account = {
         rssUrl: null,
+        order: 'old-to-new',
         activeSessionId: '',
         activeDeviceId: '',
         activeEpisodeId: '',
@@ -146,9 +150,12 @@ export class ProgressDO extends DurableObject {
     }
 
     this.account.rssUrl = body.rssUrl || null
+    if (body.order) {
+      this.account.order = body.order
+    }
     await this.persist()
 
-    return new Response(JSON.stringify({ rssUrl: this.account.rssUrl }), {
+    return new Response(JSON.stringify({ rssUrl: this.account.rssUrl, order: this.account.order }), {
       headers: { 'Content-Type': 'application/json' },
     })
   }
@@ -216,6 +223,7 @@ export class ProgressDO extends DurableObject {
     if (!this.account) {
       this.account = {
         rssUrl: null,
+        order: 'old-to-new',
         activeSessionId: '',
         activeDeviceId: '',
         activeEpisodeId: '',
@@ -250,10 +258,11 @@ export class ProgressDO extends DurableObject {
       if (!accountId) return
 
       await this.env.DB.prepare(
-        `INSERT INTO accounts (id, rss_url, active_session_id, active_device_id, active_episode_id, active_position_sec, active_state, lease_until, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO accounts (id, rss_url, order, active_session_id, active_device_id, active_episode_id, active_position_sec, active_state, lease_until, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            rss_url = excluded.rss_url,
+           order = excluded.order,
            active_session_id = excluded.active_session_id,
            active_device_id = excluded.active_device_id,
            active_episode_id = excluded.active_episode_id,
@@ -264,6 +273,7 @@ export class ProgressDO extends DurableObject {
       ).bind(
         accountId,
         this.account.rssUrl,
+        this.account.order,
         this.account.activeSessionId,
         this.account.activeDeviceId,
         this.account.activeEpisodeId,

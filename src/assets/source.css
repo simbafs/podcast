@@ -212,6 +212,12 @@ body {
   margin-bottom: 1rem;
 }
 
+.episode-list-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
 .episode-list {
   display: flex;
   flex-direction: column;

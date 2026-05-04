@@ -65,6 +65,7 @@ export function createApp() {
     const body = await c.req.json<{
       accountId: string
       rssUrl: string
+      order?: 'new-to-old' | 'old-to-new'
     }>()
 
     if (!body.accountId) {
@@ -75,7 +76,7 @@ export function createApp() {
     const req = new Request(`http://localhost/do/feed?accountId=${encodeURIComponent(body.accountId)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rssUrl: body.rssUrl }),
+      body: JSON.stringify({ rssUrl: body.rssUrl, order: body.order }),
     })
 
     const res = await stub.fetch(req)
