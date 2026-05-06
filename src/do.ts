@@ -93,6 +93,19 @@ export class ProgressDO extends DurableObject {
             updatedAt: p.updated_at,
           })
         }
+      } else {
+        // 新帳號：建立預設帳號並寫入資料庫
+        this.account = {
+          rssUrl: null,
+          order: 'old-to-new' as AccountState['order'],
+          activeSessionId: '',
+          activeDeviceId: '',
+          activeEpisodeId: '',
+          activePositionSec: 0,
+          activeState: 'paused' as AccountState['activeState'],
+          leaseUntil: 0,
+        }
+        await this.persist()
       }
 
       this.initialized = true

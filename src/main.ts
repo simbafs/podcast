@@ -151,7 +151,10 @@ async function initApp() {
   accountId = getAccountId() || generateUUID()
   setAccountId(accountId)
 
-  document.getElementById('device-badge')!.textContent = `Device: ${getDeviceId().slice(0, 8)}`
+  const currentAccountId = getAccountId()
+  const currentDeviceId = getDeviceId()
+  document.getElementById('device-badge')!.textContent = 
+    `${currentAccountId?.slice(0, 6)} (${currentDeviceId.slice(0, 6)})`
   initTheme()
 
   const feedInput = document.getElementById('rss-url') as HTMLInputElement
@@ -324,13 +327,10 @@ async function initApp() {
       feedInput.value = serverRssUrl
       updateUiState(true)
 
-      if (shouldRefetch()) {
+      if (shouldRefetch() || getEpisodes().length === 0) {
         await loadFeed(serverRssUrl, accountId)
       } else {
-        const localEpisodes = getEpisodes()
-        if (localEpisodes.length > 0) {
-          renderEpisodes()
-        }
+        renderEpisodes()
       }
     }
   } catch (e) {
