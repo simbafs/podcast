@@ -2,7 +2,6 @@ import { Episode } from './api'
 
 const STORAGE_KEYS = {
   ACCOUNT_ID: 'podcast_account_id',
-  DEVICE_ID: 'podcast_device_id',
   SESSION_ID: 'podcast_session_id',
   RSS_URL: 'podcast_rss_url',
   LAST_FETCHED_AT: 'podcast_last_fetched_at',
@@ -16,15 +15,6 @@ function generateUUID(): string {
     const v = c === 'x' ? r : (r & 0x3) | 0x8
     return v.toString(16)
   })
-}
-
-export function getDeviceId(): string {
-  let deviceId = localStorage.getItem(STORAGE_KEYS.DEVICE_ID)
-  if (!deviceId) {
-    deviceId = generateUUID()
-    localStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId)
-  }
-  return deviceId
 }
 
 export function getSessionId(): string {

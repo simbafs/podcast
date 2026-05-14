@@ -1,5 +1,5 @@
-import { getDeviceId, getSessionId, getEpisodes } from './storage'
-import { fetchState, updateProgress, ConflictError, Episode } from './api'
+import { getSessionId, getEpisodes } from './storage'
+import { fetchState, updateProgress, takeover, Episode } from './api'
 
 const SYNC_INTERVAL = 120000
 const SEEK_DEBOUNCE = 5000
@@ -7,15 +7,16 @@ const SEEK_DEBOUNCE = 5000
 export class Player {
   private audio: HTMLAudioElement
   private accountId: string
+  private sessionId: string
   private currentEpisodeId: string | null = null
   private isPlaying = false
   private syncTimer: number | null = null
   private seekTimeout: number | null = null
-  private lastSyncedState: { positionSec: number; state: string; key: string } | null = null
 
   constructor(audio: HTMLAudioElement, accountId: string) {
     this.audio = audio
     this.accountId = accountId
+    this.sessionId = getSessionId()
 
     this.audio.addEventListener('timeupdate', () => this.onTimeUpdate())
     this.audio.addEventListener('play', () => this.onPlay())
@@ -28,14 +29,15 @@ export class Player {
 
   async init() {
     try {
-      const state = await fetchState(this.accountId)
-      if (state.account?.activeEpisodeId) {
+      const state = await fetchState(this.accountId, this.sessionId)
+      if (state.progress && Object.keys(state.progress).length > 0) {
         const episodes = getEpisodes()
-        const episode = episodes.find((e) => e.id === state.account!.activeEpisodeId)
+        const firstEpisodeId = Object.keys(state.progress)[0]
+        const episode = episodes.find((e) => e.id === firstEpisodeId)
         if (episode) {
           this.currentEpisodeId = episode.id
           this.audio.src = episode.audioUrl
-          this.audio.currentTime = state.account.activePositionSec || 0
+          this.audio.currentTime = state.progress[firstEpisodeId]?.positionSec || 0
           this.updateUI()
         }
       }
@@ -52,13 +54,12 @@ export class Player {
     const wasPlaying = this.isPlaying
     const fromEpisodeId = this.currentEpisodeId
     const fromPositionSec = Math.floor(this.audio.currentTime)
-    const fromState = this.isPlaying ? 'playing' : 'paused'
 
     this.currentEpisodeId = episodeId
     this.audio.src = episode.audioUrl
 
     try {
-      const state = await fetchState(this.accountId)
+      const state = await fetchState(this.accountId, this.sessionId)
       if (state.progress[episodeId]) {
         this.audio.currentTime = state.progress[episodeId].positionSec
       }
@@ -70,14 +71,7 @@ export class Player {
 
     if (fromEpisodeId && fromEpisodeId !== episodeId) {
       try {
-        await updateProgress({
-          accountId: this.accountId,
-          sessionId: getSessionId(),
-          deviceId: getDeviceId(),
-          episodeId: fromEpisodeId,
-          positionSec: fromPositionSec,
-          state: fromState,
-        })
+        await this.syncProgressWithTakeover(fromEpisodeId, fromPositionSec)
       } catch (e) {
         console.error('Failed to save previous progress:', e)
       }
@@ -85,6 +79,30 @@ export class Player {
 
     if (wasPlaying) {
       await this.audio.play()
+    }
+  }
+
+  private async syncProgressWithTakeover(episodeId: string, positionSec: number) {
+    try {
+      await updateProgress({
+        accountId: this.accountId,
+        sessionId: this.sessionId,
+        episodeId,
+        positionSec,
+      })
+    } catch (e) {
+      const err = e as Error
+      if (err.message.includes('Only active session')) {
+        await takeover(this.accountId, this.sessionId)
+        await updateProgress({
+          accountId: this.accountId,
+          sessionId: this.sessionId,
+          episodeId,
+          positionSec,
+        })
+      } else {
+        throw e
+      }
     }
   }
 
@@ -133,10 +151,10 @@ export class Player {
     this.syncProgress()
   }
 
-  private async onEnded() {
+  private onEnded() {
     this.isPlaying = false
     this.updatePlayButton()
-    this.syncProgress('ended')
+    this.syncProgress()
   }
 
   private onLoadedMetadata() {
@@ -157,33 +175,37 @@ export class Player {
     }
   }
 
-  private async syncProgress(stateOverride?: 'playing' | 'paused' | 'ended') {
+  private async syncProgress() {
     if (!this.currentEpisodeId) return
 
-    const sessionId = getSessionId()
-    const deviceId = getDeviceId()
     const positionSec = Math.floor(this.audio.currentTime)
-    const state = stateOverride || (this.isPlaying ? 'playing' : 'paused')
-
-    const key = `${positionSec}-${state}`
-    if (this.lastSyncedState && this.lastSyncedState.key === key) return
 
     try {
       this.setSyncStatus('syncing')
       await updateProgress({
         accountId: this.accountId,
-        sessionId,
-        deviceId,
+        sessionId: this.sessionId,
         episodeId: this.currentEpisodeId,
         positionSec,
-        durationSec: Math.floor(this.audio.duration),
-        state,
       })
-      this.lastSyncedState = { positionSec, state, key }
       this.setSyncStatus('synced')
     } catch (e) {
-      if ((e as ConflictError).error === 'conflict') {
-        this.setSyncStatus('synced')
+      const err = e as Error
+      if (err.message.includes('Only active session')) {
+        try {
+          await takeover(this.accountId, this.sessionId)
+          await updateProgress({
+            accountId: this.accountId,
+            sessionId: this.sessionId,
+            episodeId: this.currentEpisodeId,
+            positionSec,
+          })
+          this.setSyncStatus('synced')
+        } catch {
+          this.setSyncStatus('error')
+        }
+      } else {
+        this.setSyncStatus('error')
       }
     }
   }
@@ -191,18 +213,13 @@ export class Player {
   private async syncBeforeUnload() {
     if (!this.currentEpisodeId) return
 
-    const sessionId = getSessionId()
-    const deviceId = getDeviceId()
     const positionSec = Math.floor(this.audio.currentTime)
-    const state = this.isPlaying ? 'playing' : 'paused'
 
     const body = JSON.stringify({
       accountId: this.accountId,
-      sessionId,
-      deviceId,
+      sessionId: this.sessionId,
       episodeId: this.currentEpisodeId,
       positionSec,
-      state,
     })
 
     navigator.sendBeacon('/api/progress', body)

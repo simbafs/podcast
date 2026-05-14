@@ -15,8 +15,13 @@ export function createApp() {
 
   app.get('/api/state', async (c) => {
     const accountId = c.req.query('accountId')
-    if (!accountId) {
-      return c.json({ error: 'accountId required' }, 400)
+    const sessionId = c.req.query('sessionId')
+
+    if (!accountId || !sessionId) {
+      return c.json(
+        { error: 'missing_credentials', message: 'accountId and sessionId are required' },
+        400
+      )
     }
 
     const stub = getDO(c.env, accountId)
@@ -31,30 +36,38 @@ export function createApp() {
     const body = await c.req.json<{
       accountId: string
       sessionId: string
-      deviceId: string
       episodeId: string
       positionSec: number
-      durationSec?: number
-      state: 'playing' | 'paused' | 'ended'
-      takeover?: boolean
     }>()
 
-    if (!body.accountId) {
-      return c.json({ error: 'accountId required' }, 400)
+    if (!body.accountId || !body.sessionId) {
+      return c.json(
+        { error: 'missing_credentials', message: 'accountId and sessionId are required' },
+        400
+      )
     }
 
     const stub = getDO(c.env, body.accountId)
-    const req = new Request(`http://localhost/do/progress?accountId=${encodeURIComponent(body.accountId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
+    const req = new Request(
+      `http://localhost/do/progress?accountId=${encodeURIComponent(body.accountId)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: body.sessionId,
+          episodeId: body.episodeId,
+          positionSec: body.positionSec,
+        }),
+      }
+    )
 
     const res = await stub.fetch(req)
 
-    if (res.status === 409) {
-      const conflict = await res.json()
-      return c.json(conflict, 409)
+    if (res.status === 403) {
+      return c.json(
+        { error: 'forbidden', message: 'Only active session can update progress' },
+        403
+      )
     }
 
     const data = await res.json()
@@ -64,20 +77,67 @@ export function createApp() {
   app.post('/api/feed', async (c) => {
     const body = await c.req.json<{
       accountId: string
+      sessionId: string
       rssUrl: string
       order?: 'new-to-old' | 'old-to-new'
     }>()
 
-    if (!body.accountId) {
-      return c.json({ error: 'accountId required' }, 400)
+    if (!body.accountId || !body.sessionId) {
+      return c.json(
+        { error: 'missing_credentials', message: 'accountId and sessionId are required' },
+        400
+      )
     }
 
     const stub = getDO(c.env, body.accountId)
-    const req = new Request(`http://localhost/do/feed?accountId=${encodeURIComponent(body.accountId)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rssUrl: body.rssUrl, order: body.order }),
-    })
+    const req = new Request(
+      `http://localhost/do/feed?accountId=${encodeURIComponent(body.accountId)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: body.sessionId,
+          rssUrl: body.rssUrl,
+          order: body.order,
+        }),
+      }
+    )
+
+    const res = await stub.fetch(req)
+
+    if (res.status === 403) {
+      return c.json(
+        { error: 'forbidden', message: 'Only active session can update feed' },
+        403
+      )
+    }
+
+    const data = await res.json()
+    return c.json(data)
+  })
+
+  app.post('/api/takeover', async (c) => {
+    const body = await c.req.json<{
+      accountId: string
+      sessionId: string
+    }>()
+
+    if (!body.accountId || !body.sessionId) {
+      return c.json(
+        { error: 'missing_credentials', message: 'accountId and sessionId are required' },
+        400
+      )
+    }
+
+    const stub = getDO(c.env, body.accountId)
+    const req = new Request(
+      `http://localhost/do/takeover?accountId=${encodeURIComponent(body.accountId)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: body.sessionId }),
+      }
+    )
 
     const res = await stub.fetch(req)
     const data = await res.json()

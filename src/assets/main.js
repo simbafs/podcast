@@ -3,7 +3,6 @@
   // src/lib/storage.ts
   var STORAGE_KEYS = {
     ACCOUNT_ID: "podcast_account_id",
-    DEVICE_ID: "podcast_device_id",
     SESSION_ID: "podcast_session_id",
     RSS_URL: "podcast_rss_url",
     LAST_FETCHED_AT: "podcast_last_fetched_at",
@@ -16,14 +15,6 @@
       const v = c === "x" ? r : r & 3 | 8;
       return v.toString(16);
     });
-  }
-  function getDeviceId() {
-    let deviceId = localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
-    if (!deviceId) {
-      deviceId = generateUUID();
-      localStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId);
-    }
-    return deviceId;
   }
   function getSessionId() {
     let sessionId = sessionStorage.getItem(STORAGE_KEYS.SESSION_ID);
@@ -82,9 +73,14 @@
 
   // src/lib/api.ts
   var API_BASE = "";
-  async function fetchState(accountId2) {
-    const res = await fetch(`${API_BASE}/api/state?accountId=${encodeURIComponent(accountId2)}`);
-    if (!res.ok) throw new Error("Failed to fetch state");
+  async function fetchState(accountId2, sessionId) {
+    const res = await fetch(
+      `${API_BASE}/api/state?accountId=${encodeURIComponent(accountId2)}&sessionId=${encodeURIComponent(sessionId)}`
+    );
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || "Failed to fetch state");
+    }
     return res.json();
   }
   async function updateProgress(body) {
@@ -93,19 +89,34 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    if (res.status === 409) {
-      const conflict = await res.json();
-      throw conflict;
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || "Failed to update progress");
     }
-    if (!res.ok) throw new Error("Failed to update progress");
+    return res.json();
   }
-  async function saveFeedUrl(accountId2, rssUrl, order) {
+  async function saveFeedUrl(accountId2, sessionId, rssUrl, order) {
     const res = await fetch(`${API_BASE}/api/feed`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId: accountId2, rssUrl, order })
+      body: JSON.stringify({ accountId: accountId2, sessionId, rssUrl, order })
     });
-    if (!res.ok) throw new Error("Failed to save feed URL");
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || "Failed to save feed URL");
+    }
+    return res.json();
+  }
+  async function takeover(accountId2, sessionId) {
+    const res = await fetch(`${API_BASE}/api/takeover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId: accountId2, sessionId })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || "Failed to takeover");
+    }
     return res.json();
   }
   function generateUUID2() {
@@ -122,14 +133,15 @@
   var Player = class {
     audio;
     accountId;
+    sessionId;
     currentEpisodeId = null;
     isPlaying = false;
     syncTimer = null;
     seekTimeout = null;
-    lastSyncedState = null;
     constructor(audio, accountId2) {
       this.audio = audio;
       this.accountId = accountId2;
+      this.sessionId = getSessionId();
       this.audio.addEventListener("timeupdate", () => this.onTimeUpdate());
       this.audio.addEventListener("play", () => this.onPlay());
       this.audio.addEventListener("pause", () => this.onPause());
@@ -139,14 +151,15 @@
     }
     async init() {
       try {
-        const state = await fetchState(this.accountId);
-        if (state.account?.activeEpisodeId) {
+        const state = await fetchState(this.accountId, this.sessionId);
+        if (state.progress && Object.keys(state.progress).length > 0) {
           const episodes = getEpisodes();
-          const episode = episodes.find((e) => e.id === state.account.activeEpisodeId);
+          const firstEpisodeId = Object.keys(state.progress)[0];
+          const episode = episodes.find((e) => e.id === firstEpisodeId);
           if (episode) {
             this.currentEpisodeId = episode.id;
             this.audio.src = episode.audioUrl;
-            this.audio.currentTime = state.account.activePositionSec || 0;
+            this.audio.currentTime = state.progress[firstEpisodeId]?.positionSec || 0;
             this.updateUI();
           }
         }
@@ -161,11 +174,10 @@
       const wasPlaying = this.isPlaying;
       const fromEpisodeId = this.currentEpisodeId;
       const fromPositionSec = Math.floor(this.audio.currentTime);
-      const fromState = this.isPlaying ? "playing" : "paused";
       this.currentEpisodeId = episodeId;
       this.audio.src = episode.audioUrl;
       try {
-        const state = await fetchState(this.accountId);
+        const state = await fetchState(this.accountId, this.sessionId);
         if (state.progress[episodeId]) {
           this.audio.currentTime = state.progress[episodeId].positionSec;
         }
@@ -175,20 +187,36 @@
       this.updateUI();
       if (fromEpisodeId && fromEpisodeId !== episodeId) {
         try {
-          await updateProgress({
-            accountId: this.accountId,
-            sessionId: getSessionId(),
-            deviceId: getDeviceId(),
-            episodeId: fromEpisodeId,
-            positionSec: fromPositionSec,
-            state: fromState
-          });
+          await this.syncProgressWithTakeover(fromEpisodeId, fromPositionSec);
         } catch (e) {
           console.error("Failed to save previous progress:", e);
         }
       }
       if (wasPlaying) {
         await this.audio.play();
+      }
+    }
+    async syncProgressWithTakeover(episodeId, positionSec) {
+      try {
+        await updateProgress({
+          accountId: this.accountId,
+          sessionId: this.sessionId,
+          episodeId,
+          positionSec
+        });
+      } catch (e) {
+        const err = e;
+        if (err.message.includes("Only active session")) {
+          await takeover(this.accountId, this.sessionId);
+          await updateProgress({
+            accountId: this.accountId,
+            sessionId: this.sessionId,
+            episodeId,
+            positionSec
+          });
+        } else {
+          throw e;
+        }
       }
     }
     toggle() {
@@ -228,10 +256,10 @@
       this.stopSyncTimer();
       this.syncProgress();
     }
-    async onEnded() {
+    onEnded() {
       this.isPlaying = false;
       this.updatePlayButton();
-      this.syncProgress("ended");
+      this.syncProgress();
     }
     onLoadedMetadata() {
       this.updateUI();
@@ -248,46 +276,46 @@
         this.syncTimer = null;
       }
     }
-    async syncProgress(stateOverride) {
+    async syncProgress() {
       if (!this.currentEpisodeId) return;
-      const sessionId = getSessionId();
-      const deviceId = getDeviceId();
       const positionSec = Math.floor(this.audio.currentTime);
-      const state = stateOverride || (this.isPlaying ? "playing" : "paused");
-      const key = `${positionSec}-${state}`;
-      if (this.lastSyncedState && this.lastSyncedState.key === key) return;
       try {
         this.setSyncStatus("syncing");
         await updateProgress({
           accountId: this.accountId,
-          sessionId,
-          deviceId,
+          sessionId: this.sessionId,
           episodeId: this.currentEpisodeId,
-          positionSec,
-          durationSec: Math.floor(this.audio.duration),
-          state
+          positionSec
         });
-        this.lastSyncedState = { positionSec, state, key };
         this.setSyncStatus("synced");
       } catch (e) {
-        if (e.error === "conflict") {
-          this.setSyncStatus("synced");
+        const err = e;
+        if (err.message.includes("Only active session")) {
+          try {
+            await takeover(this.accountId, this.sessionId);
+            await updateProgress({
+              accountId: this.accountId,
+              sessionId: this.sessionId,
+              episodeId: this.currentEpisodeId,
+              positionSec
+            });
+            this.setSyncStatus("synced");
+          } catch {
+            this.setSyncStatus("error");
+          }
+        } else {
+          this.setSyncStatus("error");
         }
       }
     }
     async syncBeforeUnload() {
       if (!this.currentEpisodeId) return;
-      const sessionId = getSessionId();
-      const deviceId = getDeviceId();
       const positionSec = Math.floor(this.audio.currentTime);
-      const state = this.isPlaying ? "playing" : "paused";
       const body = JSON.stringify({
         accountId: this.accountId,
-        sessionId,
-        deviceId,
+        sessionId: this.sessionId,
         episodeId: this.currentEpisodeId,
-        positionSec,
-        state
+        positionSec
       });
       navigator.sendBeacon("/api/progress", body);
     }
@@ -512,13 +540,24 @@
   }
   async function loadFeed(url, currentAccountId) {
     const statusEl = document.getElementById("feed-status");
+    const sessionId = getSessionId();
     statusEl.textContent = "Fetching feed...";
     try {
       const feed = await parseFeed(url);
       setRssUrl(url);
       setEpisodes(feed.episodes);
       setLastFetchedAt(Date.now());
-      await saveFeedUrl(currentAccountId, url);
+      try {
+        await saveFeedUrl(currentAccountId, sessionId, url);
+      } catch (e) {
+        const err = e;
+        if (err.message.includes("Only active session")) {
+          await takeover(currentAccountId, sessionId);
+          await saveFeedUrl(currentAccountId, sessionId, url);
+        } else {
+          throw e;
+        }
+      }
       statusEl.textContent = `Loaded ${feed.episodes.length} episodes from "${feed.title}"`;
       updateUiState(true);
       renderEpisodes();
@@ -530,8 +569,8 @@
     accountId = getAccountId() || generateUUID2();
     setAccountId(accountId);
     const currentAccountId = getAccountId();
-    const currentDeviceId = getDeviceId();
-    document.getElementById("device-badge").textContent = `${currentAccountId?.slice(0, 6)} (${currentDeviceId.slice(0, 6)})`;
+    const currentSessionId = getSessionId();
+    document.getElementById("device-badge").textContent = `${currentAccountId?.slice(0, 6)} (${currentSessionId.slice(0, 6)})`;
     initTheme();
     const feedInput = document.getElementById("rss-url");
     const fetchBtn = document.getElementById("fetch-feed-btn");
@@ -556,8 +595,9 @@
       const currentOrder = getOrder();
       const newOrder = currentOrder === "new-to-old" ? "old-to-new" : "new-to-old";
       setOrder(newOrder);
+      const sessionId = getSessionId();
       try {
-        await saveFeedUrl(accountId, getRssUrl() || "", newOrder);
+        await saveFeedUrl(accountId, sessionId, getRssUrl() || "", newOrder);
       } catch (e) {
         console.error("Failed to sync order:", e);
       }
@@ -567,8 +607,9 @@
       const currentOrder = getOrder();
       const newOrder = currentOrder === "new-to-old" ? "old-to-new" : "new-to-old";
       setOrder(newOrder);
+      const sessionId = getSessionId();
       try {
-        await saveFeedUrl(accountId, getRssUrl() || "", newOrder);
+        await saveFeedUrl(accountId, sessionId, getRssUrl() || "", newOrder);
       } catch (e) {
         console.error("Failed to sync order:", e);
       }
@@ -579,8 +620,9 @@
       setRssUrl("");
       setLastFetchedAt(0);
       setOrder("old-to-new");
+      const sessionId = getSessionId();
       try {
-        await saveFeedUrl(accountId, "", "old-to-new");
+        await saveFeedUrl(accountId, sessionId, "", "old-to-new");
       } catch (e) {
         console.error("Failed to clear feed URL:", e);
       }
@@ -674,7 +716,8 @@
       player?.seek(value);
     });
     try {
-      const state = await fetchState(accountId);
+      const sessionId = getSessionId();
+      const state = await fetchState(accountId, sessionId);
       const serverRssUrl = state.account?.rssUrl || null;
       const serverOrder = state.account?.order || "old-to-new";
       setOrder(serverOrder);

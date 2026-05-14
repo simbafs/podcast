@@ -1,6 +1,6 @@
 import {
   getAccountId,
-  getDeviceId,
+  getSessionId,
   setAccountId,
   getRssUrl,
   setRssUrl,
@@ -12,7 +12,7 @@ import {
   getOrder,
   setOrder,
 } from './lib/storage'
-import { fetchState, generateUUID, saveFeedUrl } from './lib/api'
+import { fetchState, generateUUID, saveFeedUrl, takeover } from './lib/api'
 import { Player } from './lib/player'
 import { parseFeed } from './lib/rss'
 
@@ -128,6 +128,7 @@ function updateUiState(hasEpisodes: boolean) {
 
 async function loadFeed(url: string, currentAccountId: string) {
   const statusEl = document.getElementById('feed-status')
+  const sessionId = getSessionId()
 
   statusEl!.textContent = 'Fetching feed...'
 
@@ -137,7 +138,17 @@ async function loadFeed(url: string, currentAccountId: string) {
     setEpisodes(feed.episodes)
     setLastFetchedAt(Date.now())
 
-    await saveFeedUrl(currentAccountId, url)
+    try {
+      await saveFeedUrl(currentAccountId, sessionId, url)
+    } catch (e) {
+      const err = e as Error
+      if (err.message.includes('Only active session')) {
+        await takeover(currentAccountId, sessionId)
+        await saveFeedUrl(currentAccountId, sessionId, url)
+      } else {
+        throw e
+      }
+    }
 
     statusEl!.textContent = `Loaded ${feed.episodes.length} episodes from "${feed.title}"`
     updateUiState(true)
@@ -152,9 +163,9 @@ async function initApp() {
   setAccountId(accountId)
 
   const currentAccountId = getAccountId()
-  const currentDeviceId = getDeviceId()
+  const currentSessionId = getSessionId()
   document.getElementById('device-badge')!.textContent = 
-    `${currentAccountId?.slice(0, 6)} (${currentDeviceId.slice(0, 6)})`
+    `${currentAccountId?.slice(0, 6)} (${currentSessionId.slice(0, 6)})`
   initTheme()
 
   const feedInput = document.getElementById('rss-url') as HTMLInputElement
@@ -184,8 +195,9 @@ async function initApp() {
     const currentOrder = getOrder()
     const newOrder = currentOrder === 'new-to-old' ? 'old-to-new' : 'new-to-old'
     setOrder(newOrder)
+    const sessionId = getSessionId()
     try {
-      await saveFeedUrl(accountId, getRssUrl() || '', newOrder)
+      await saveFeedUrl(accountId, sessionId, getRssUrl() || '', newOrder)
     } catch (e) {
       console.error('Failed to sync order:', e)
     }
@@ -196,8 +208,9 @@ async function initApp() {
     const currentOrder = getOrder()
     const newOrder = currentOrder === 'new-to-old' ? 'old-to-new' : 'new-to-old'
     setOrder(newOrder)
+    const sessionId = getSessionId()
     try {
-      await saveFeedUrl(accountId, getRssUrl() || '', newOrder)
+      await saveFeedUrl(accountId, sessionId, getRssUrl() || '', newOrder)
     } catch (e) {
       console.error('Failed to sync order:', e)
     }
@@ -210,8 +223,9 @@ async function initApp() {
     setLastFetchedAt(0)
     setOrder('old-to-new')
 
+    const sessionId = getSessionId()
     try {
-      await saveFeedUrl(accountId, '', 'old-to-new')
+      await saveFeedUrl(accountId, sessionId, '', 'old-to-new')
     } catch (e) {
       console.error('Failed to clear feed URL:', e)
     }
@@ -317,7 +331,8 @@ async function initApp() {
   })
 
   try {
-    const state = await fetchState(accountId)
+    const sessionId = getSessionId()
+    const state = await fetchState(accountId, sessionId)
     const serverRssUrl = state.account?.rssUrl || null
     const serverOrder = state.account?.order || 'old-to-new'
     setOrder(serverOrder)

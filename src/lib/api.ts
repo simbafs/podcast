@@ -1,20 +1,15 @@
 const API_BASE = ''
 
 export interface AccountState {
+  accountId: string
   rssUrl: string | null
   order: 'new-to-old' | 'old-to-new'
-  activeEpisodeId: string
-  activePositionSec: number
-  activeState: 'playing' | 'paused' | 'ended'
-  deviceId: string
-  leaseUntil: number
+  activeSessionId: string
 }
 
 export interface EpisodeProgress {
   episodeId: string
   positionSec: number
-  durationSec?: number
-  state: 'playing' | 'paused' | 'ended'
   updatedAt: number
 }
 
@@ -23,50 +18,74 @@ export interface StateResponse {
   progress: Record<string, EpisodeProgress>
 }
 
-export interface ConflictError {
-  error: 'conflict'
-  activeSessionId: string
-  activeDeviceId: string
-  leaseUntil: number
+export interface ApiError {
+  error: string
+  message: string
 }
 
-export async function fetchState(accountId: string): Promise<StateResponse> {
-  const res = await fetch(`${API_BASE}/api/state?accountId=${encodeURIComponent(accountId)}`)
-  if (!res.ok) throw new Error('Failed to fetch state')
+export async function fetchState(accountId: string, sessionId: string): Promise<StateResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/state?accountId=${encodeURIComponent(accountId)}&sessionId=${encodeURIComponent(sessionId)}`
+  )
+  if (!res.ok) {
+    const err: ApiError = await res.json()
+    throw new Error(err.message || 'Failed to fetch state')
+  }
   return res.json()
 }
 
 export async function updateProgress(body: {
   accountId: string
   sessionId: string
-  deviceId: string
   episodeId: string
   positionSec: number
-  durationSec?: number
-  state: EpisodeProgress['state']
-  takeover?: boolean
-}): Promise<void> {
+}): Promise<{ success: boolean; activeSessionId: string }> {
   const res = await fetch(`${API_BASE}/api/progress`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 
-  if (res.status === 409) {
-    const conflict: ConflictError = await res.json()
-    throw conflict
+  if (!res.ok) {
+    const err: ApiError = await res.json()
+    throw new Error(err.message || 'Failed to update progress')
   }
 
-  if (!res.ok) throw new Error('Failed to update progress')
+  return res.json()
 }
 
-export async function saveFeedUrl(accountId: string, rssUrl: string, order?: 'new-to-old' | 'old-to-new'): Promise<{ rssUrl: string; order: string }> {
+export async function saveFeedUrl(
+  accountId: string,
+  sessionId: string,
+  rssUrl: string,
+  order?: 'new-to-old' | 'old-to-new'
+): Promise<{ rssUrl: string; order: string }> {
   const res = await fetch(`${API_BASE}/api/feed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ accountId, rssUrl, order }),
+    body: JSON.stringify({ accountId, sessionId, rssUrl, order }),
   })
-  if (!res.ok) throw new Error('Failed to save feed URL')
+
+  if (!res.ok) {
+    const err: ApiError = await res.json()
+    throw new Error(err.message || 'Failed to save feed URL')
+  }
+
+  return res.json()
+}
+
+export async function takeover(accountId: string, sessionId: string): Promise<{ success: boolean; activeSessionId: string }> {
+  const res = await fetch(`${API_BASE}/api/takeover`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId, sessionId }),
+  })
+
+  if (!res.ok) {
+    const err: ApiError = await res.json()
+    throw new Error(err.message || 'Failed to takeover')
+  }
+
   return res.json()
 }
 
