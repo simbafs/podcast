@@ -246,11 +246,24 @@ class Player {
 
     if (state.episodeId && state.episodeId !== this.currentEpisodeId) {
       this.currentEpisodeId = state.episodeId;
+
       const episodes = getEpisodes();
-      const ep = episodes.find(e => e.id === state.episodeId);
-      if (ep) {
-        this.audio.src = ep.audioUrl;
+      if (episodes.length === 0) {
+        const rssUrl = getRssUrl();
+        if (rssUrl) {
+          fetch(rssUrl)
+            .then(r => r.text())
+            .then(t => parseFeed(t))
+            .then(f => {
+              setEpisodes(f.episodes);
+              renderEpisodes();
+              this.updateUI();
+            });
+          return;
+        }
       }
+
+      this.updateUI();
     }
 
     if (state.positionSec && this.isActiveConnection) {
@@ -258,8 +271,6 @@ class Player {
         this.audio.currentTime = state.positionSec;
       }
     }
-
-    this.updateUI();
   }
 }
 
@@ -485,40 +496,14 @@ async function loadInitialState() {
     if (data.account?.rssUrl) {
       setRssUrl(data.account.rssUrl);
       document.getElementById('rss-url').value = data.account.rssUrl;
+      await loadFeed(data.account.rssUrl);
+      return;
     }
 
     if (data.account?.orderDir) {
       setOrder(data.account.orderDir);
       const toggleOrderBtn = document.getElementById('toggle-order-btn');
       toggleOrderBtn.textContent = `Order: ${data.account.orderDir === 'new-to-old' ? 'New to Old' : 'Old to New'}`;
-    }
-
-    if (data.progress && Object.keys(data.progress).length > 0) {
-      const firstEpId = Object.keys(data.progress)[0];
-      const pos = data.progress[firstEpId]?.positionSec || 0;
-
-      const storedUrl = getRssUrl();
-      if (storedUrl) {
-        try {
-          const res = await fetch(storedUrl);
-          const text = await res.text();
-          const feed = parseFeed(text);
-          setEpisodes(feed.episodes);
-
-          updateUiState(true);
-          renderEpisodes();
-
-          const ep = feed.episodes.find(e => e.id === firstEpId);
-          if (ep) {
-            player.currentEpisodeId = ep.id;
-            player.audio.src = ep.audioUrl;
-            player.audio.currentTime = pos;
-            player.updateUI();
-          }
-        } catch (e) {
-          console.error('Failed to load episodes:', e);
-        }
-      }
     }
   } catch (e) {
     console.error('Failed to load initial state:', e);
