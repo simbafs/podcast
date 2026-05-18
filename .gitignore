@@ -1,7 +1,38 @@
-node_modules/
-dist/
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Build
+/server
+/podcast-sync
+
+# Data
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Dependencies
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
 *.log
+
+# Environment
 .env
-.env.local.wrangler
-.wrangler
+.env.local

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Podcast Sync</title>
+  <link rel="stylesheet" href="/static/global.css">
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <h1>Podcast Sync</h1>
+      <span class="device-badge" id="device-badge">Not connected</span>
+    </header>
+
+    <main class="main" id="main">
+      <div class="no-account" id="no-account">
+        <button type="button" class="btn btn-primary" id="create-account-btn">Create Account</button>
+      </div>
+
+      <div class="feed-input-row" id="feed-section">
+        <input type="text" class="input" id="rss-url" placeholder="RSS Feed URL">
+        <button type="button" class="btn btn-primary" id="fetch-feed-btn">Load Feed</button>
+        <span class="import-status" id="feed-status"></span>
+      </div>
+
+      <div class="episode-header" id="episode-header">
+        <button type="button" class="btn btn-sm btn-secondary" id="toggle-order-btn">Order: Old to New</button>
+        <button type="button" class="btn btn-sm btn-secondary" id="takeover-btn">Takeover Playback</button>
+      </div>
+
+      <div class="tabs">
+        <button type="button" class="tab-btn active" data-tab="episodes">Episodes</button>
+        <button type="button" class="tab-btn" data-tab="queue">Queue</button>
+      </div>
+
+      <div class="episode-list" id="episode-list"></div>
+    </main>
+
+    <div class="player-bar" id="player-bar">
+      <div class="player-episode-info">
+        <span class="player-episode-title" id="now-playing-title">No episode playing</span>
+        <span class="player-episode-time" id="player-time"></span>
+      </div>
+
+      <div class="player-controls">
+        <button type="button" class="control-btn" id="prev-btn">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        </button>
+        <button type="button" class="play-btn" id="play-pause-btn">
+          <svg class="play-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+          <svg class="pause-icon hidden" viewBox="0 0 24 24"><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        </button>
+        <button type="button" class="control-btn" id="next-btn">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+        </button>
+      </div>
+
+      <div class="player-progress">
+        <span class="time-text" id="current-time">00:00</span>
+        <input type="range" class="progress-slider" id="progress-slider" min="0" max="100" value="0">
+        <span class="time-text" id="duration">00:00</span>
+      </div>
+
+      <div class="sync-status">
+        <span class="sync-indicator" id="sync-indicator"></span>
+        <span id="sync-text">Connecting...</span>
+      </div>
+    </div>
+  </div>
+
+  <audio id="audio"></audio>
+  <script src="/static/main.js"></script>
+</body>
+</html>
