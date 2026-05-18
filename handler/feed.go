@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"podcast-sync/internal/db"
-	"podcast-sync/internal/player"
+	"podcast-sync/db"
+	"podcast-sync/player"
 )
 
 type FeedHandler struct {

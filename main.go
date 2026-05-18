@@ -8,10 +8,10 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"podcast-sync/internal/db"
-	"podcast-sync/internal/handler"
-	"podcast-sync/internal/player"
-	ws "podcast-sync/internal/ws"
+	"podcast-sync/db"
+	"podcast-sync/handler"
+	"podcast-sync/player"
+	ws "podcast-sync/ws"
 )
 
 func main() {
@@ -66,6 +66,11 @@ func main() {
 	frontendDir := dir + "/frontend"
 	if _, err := os.Stat(frontendDir); err == nil {
 		r.Static("/static", frontendDir)
+
+		r.GET("/login", func(c *gin.Context) {
+			c.File(frontendDir + "/login.html")
+		})
+
 		r.GET("/", func(c *gin.Context) {
 			c.File(frontendDir + "/index.html")
 		})

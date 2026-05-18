@@ -243,3 +243,22 @@ services:
 - 播放狀態變化（play/pause/seek）時寫入 SQLite
 - 定時 sync（每 30 秒）寫入 SQLite
 - 收到 state 廣播時更新 UI
+
+---
+
+## 已實作：Login 頁面
+
+### 新增 /login 路由
+- Go server 新增 `/login` 端點，返回登入 HTML
+
+### 前端邏輯
+- 無 account 時 redirect 到 `/login`
+- `/login` 頁面提供 Create New Account 或 Join Account 選項
+- Create：產生 UUID 並存 localStorage
+- Join：直接存輸入的 account ID
+
+### 檔案
+- `cmd/server/main.go`：新增 `/login` 路由
+- `frontend/index.html`：新增 login-page section
+- `frontend/main.js`：新增 router 和 login 邏輯
+- `frontend/global.css`：新增 login 樣式

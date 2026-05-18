@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"podcast-sync/internal/player"
+	"podcast-sync/player"
 )
 
 var upgrader = websocket.Upgrader{
