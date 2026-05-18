@@ -3,11 +3,15 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	_ "embed"
 	"os"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+//go:embed schema.sql
+var schemaSQL string
 
 var DB *sql.DB
 
@@ -33,6 +37,10 @@ func Init(dbPath string) error {
 	DB.SetMaxIdleConns(5)
 	DB.SetConnMaxLifetime(5 * time.Minute)
 
+	if err := initSchema(); err != nil {
+		return fmt.Errorf("failed to initialize schema: %w", err)
+	}
+
 	return nil
 }
 
@@ -45,4 +53,9 @@ func Close() error {
 
 func GetDB() *sql.DB {
 	return DB
+}
+
+func initSchema() error {
+	_, err := DB.Exec(schemaSQL)
+	return err
 }
