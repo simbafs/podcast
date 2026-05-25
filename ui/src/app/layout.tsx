@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 
@@ -17,14 +17,30 @@ export const metadata: Metadata = {
 	description: 'Sync podcast progress across devices',
 }
 
+export const viewport: Viewport = {
+	themeColor: [
+		{ media: '(prefers-color-scheme: light)', color: '#ffffff' },
+		{ media: '(prefers-color-scheme: dark)', color: '#09090b' },
+	],
+}
+
 export default function RootLayout({
 	children,
 }: Readonly<{
 	children: React.ReactNode
 }>) {
 	return (
-		<html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-			<body className="min-h-full flex flex-col bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+		<html
+			lang="en"
+			className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+			suppressHydrationWarning
+		>
+			<body className="flex flex-col bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+				<script
+					dangerouslySetInnerHTML={{
+						__html: `(function(){try{var e=localStorage.getItem('theme')||'system',d=e==='dark'||e==='system'&&window.matchMedia('(prefers-color-scheme:dark)').matches;if(d)document.documentElement.classList.add('dark');document.documentElement.style.colorScheme=d?'dark':'light'}catch(e){}})()`,
+					}}
+				/>
 				{children}
 			</body>
 		</html>

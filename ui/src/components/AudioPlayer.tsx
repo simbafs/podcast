@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react'
 import type { Episode } from '@/utils/api'
 
 interface AudioPlayerProps {
@@ -19,6 +20,13 @@ interface AudioPlayerProps {
 
 function useVolume() {
 	return useLocalStorage('player_volume', 1)
+}
+
+function formatTime(sec: number): string {
+	if (!sec || !isFinite(sec)) return '0:00'
+	const m = Math.floor(sec / 60)
+	const s = Math.floor(sec % 60)
+	return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 export default function AudioPlayer({
@@ -78,7 +86,8 @@ export default function AudioPlayer({
 		audio.currentTime = seekTo
 	}, [seekTo])
 
-	const currentIndex = episodes.findIndex((e) => e.guid === currentGuid)
+	const currentEpisode = episodes.find(e => e.guid === currentGuid)
+	const currentIndex = episodes.findIndex(e => e.guid === currentGuid)
 	const hasPrev = currentIndex > 0
 	const hasNext = currentIndex < episodes.length - 1
 
@@ -135,24 +144,53 @@ export default function AudioPlayer({
 		[setVolume],
 	)
 
+	const progressPct = duration > 0 ? (position / duration) * 100 : 0
+
 	return (
-		<div className="flex flex-col gap-2 border-t bg-white p-3 dark:bg-zinc-900">
-			{/* Progress bar row */}
+		<div className="flex flex-col gap-2 border-t border-zinc-200 bg-white/80 px-4 pb-4 pt-3 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/80">
+			{/* Track title */}
+			{currentEpisode && (
+				<div className="flex items-center justify-between gap-2">
+					<p className="truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">
+						{currentEpisode.title}
+					</p>
+					{readonly && (
+						<span className="shrink-0 rounded-full border border-amber-200 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:border-amber-800 dark:text-amber-400">
+							read-only
+						</span>
+					)}
+				</div>
+			)}
+
+			{/* Progress bar */}
 			<div className="flex items-center gap-2">
-				<span className="w-10 text-right text-xs tabular-nums text-zinc-500">
+				<span className="w-10 text-right text-xs tabular-nums text-zinc-400">
 					{formatTime(position)}
 				</span>
-				<input
-					type="range"
-					min={0}
-					max={duration || 0}
-					value={position}
-					onChange={handleSeek}
-					onMouseUp={() => (seekingRef.current = false)}
-					onTouchEnd={() => (seekingRef.current = false)}
-					className="h-1 w-full cursor-pointer appearance-none rounded-full bg-zinc-200 accent-zinc-900 dark:bg-zinc-700"
-				/>
-				<span className="w-10 text-xs tabular-nums text-zinc-500">{formatTime(duration)}</span>
+				<div className="relative flex-1">
+					{/* Track background */}
+					<div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+					{/* Track fill */}
+					<div
+						className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-gradient-to-r from-teal-500 to-teal-400 dark:from-teal-600 dark:to-teal-500"
+						style={{ width: `${progressPct}%` }}
+					/>
+					<input
+						type="range"
+						min={0}
+						max={duration || 0}
+						value={position}
+						onChange={handleSeek}
+						onMouseUp={() => (seekingRef.current = false)}
+						onTouchEnd={() => (seekingRef.current = false)}
+						disabled={readonly}
+						aria-label="Seek position"
+						className="relative z-10 h-4 w-full cursor-pointer opacity-0"
+					/>
+				</div>
+				<span className="w-10 text-xs tabular-nums text-zinc-400">
+					{formatTime(duration)}
+				</span>
 			</div>
 
 			{/* Controls row */}
@@ -162,29 +200,23 @@ export default function AudioPlayer({
 						type="button"
 						onClick={handlePrev}
 						disabled={!hasPrev || readonly}
-						className="flex h-8 w-8 items-center justify-center rounded text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 dark:text-zinc-400 dark:hover:bg-zinc-800"
+						aria-label="Previous episode"
+						className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
 					>
-						<svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-							<polygon points="19,20 9,12 19,4" />
-							<rect x="5" y="4" width="2" height="16" />
-						</svg>
+						<SkipBack className="h-4 w-4" aria-hidden="true" />
 					</button>
 
 					<button
 						type="button"
 						onClick={handlePlayPause}
-						disabled={!audioUrl || readonly}
-						className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+						disabled={!audioUrl}
+						aria-label={playing ? 'Pause' : 'Play'}
+						className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-600 text-white shadow-sm shadow-teal-200 hover:bg-teal-500 active:scale-95 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 dark:shadow-teal-900 dark:focus-visible:ring-offset-zinc-900"
 					>
 						{playing ? (
-							<svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-								<rect x="6" y="4" width="4" height="16" />
-								<rect x="14" y="4" width="4" height="16" />
-							</svg>
+							<Pause className="h-5 w-5" aria-hidden="true" />
 						) : (
-							<svg className="ml-0.5 h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-								<polygon points="5,3 19,12 5,21" />
-							</svg>
+							<Play className="ml-0.5 h-5 w-5" aria-hidden="true" />
 						)}
 					</button>
 
@@ -192,29 +224,43 @@ export default function AudioPlayer({
 						type="button"
 						onClick={handleNext}
 						disabled={!hasNext || readonly}
-						className="flex h-8 w-8 items-center justify-center rounded text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 dark:text-zinc-400 dark:hover:bg-zinc-800"
+						aria-label="Next episode"
+						className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
 					>
-						<svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-							<polygon points="5,4 15,12 5,20" />
-							<rect x="17" y="4" width="2" height="16" />
-						</svg>
+						<SkipForward className="h-4 w-4" aria-hidden="true" />
 					</button>
+
+					{/* Equalizer when playing */}
+					{playing && (
+						<div className="ml-2 flex items-end gap-[2px]" aria-hidden="true">
+							<div className="equalizer-bar w-[3px] rounded-full bg-teal-500" />
+							<div className="equalizer-bar w-[3px] rounded-full bg-teal-400" />
+							<div className="equalizer-bar w-[3px] rounded-full bg-teal-500" />
+							<div className="equalizer-bar w-[3px] rounded-full bg-teal-400" />
+						</div>
+					)}
 				</div>
 
 				{/* Volume */}
 				<div className="flex items-center gap-1.5">
-					<svg className="h-3.5 w-3.5 text-zinc-400" fill="currentColor" viewBox="0 0 24 24">
-						<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
-					</svg>
-					<input
-						type="range"
-						min={0}
-						max={1}
-						step={0.05}
-						value={volume}
-						onChange={handleVolume}
-						className="h-1 w-20 cursor-pointer appearance-none rounded-full bg-zinc-200 accent-zinc-900 dark:bg-zinc-700"
-					/>
+					<Volume2 className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+					<div className="relative h-4 w-20">
+						<div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+						<div
+							className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-teal-500 dark:bg-teal-600"
+							style={{ width: `${volume * 100}%` }}
+						/>
+						<input
+							type="range"
+							min={0}
+							max={1}
+							step={0.05}
+							value={volume}
+							onChange={handleVolume}
+							aria-label="Volume"
+							className="relative z-10 h-4 w-full cursor-pointer opacity-0"
+						/>
+					</div>
 				</div>
 			</div>
 
@@ -226,11 +272,4 @@ export default function AudioPlayer({
 			/>
 		</div>
 	)
-}
-
-function formatTime(sec: number): string {
-	if (!sec || !isFinite(sec)) return '0:00'
-	const m = Math.floor(sec / 60)
-	const s = Math.floor(sec % 60)
-	return `${m}:${s.toString().padStart(2, '0')}`
 }
