@@ -36,3 +36,10 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Node
+node_modules/
+
+# Frontend build output (keep .gitkeep)
+frontend/dist/*
+!frontend/dist/.gitkeep

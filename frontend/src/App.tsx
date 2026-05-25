@@ -1,34 +1,11 @@
-import { useEffect } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
-import { getAccountId } from "./lib/storage";
-import { Home } from "./pages/Home";
-import { Login } from "./pages/Login";
+import { getAccountId } from "./lib/storage"
+import { Home } from "./pages/Home"
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (!getAccountId()) {
-      navigate("/login");
-    }
-  }, [navigate]);
-  return children;
-}
+export function App() {
+	if (!getAccountId()) {
+		window.location.href = "/login"
+		return null
+	}
 
-export default function App() {
-  return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <RequireAuth>
-            <Home />
-          </RequireAuth>
-        }
-      />
-      <Route
-        path="/login"
-        element={<Login />}
-      />
-    </Routes>
-  );
+	return <Home />
 }

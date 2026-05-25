@@ -1,18 +1,22 @@
 package main
 
 import (
+	"embed"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/simbafs/kama/v2"
 	"podcast-sync/db"
 	"podcast-sync/handler"
 	"podcast-sync/player"
 	ws "podcast-sync/ws"
 )
+
+//go:embed all:frontend/dist
+var frontend embed.FS
 
 func main() {
 	dbPath := flag.String("db", "./data/podcast.db", "Database path")
@@ -62,15 +66,29 @@ func main() {
 		})
 	})
 
-	dir, _ := os.Getwd()
-	frontendDir := dir + "/public"
-	if _, err := os.Stat(frontendDir); err == nil {
-		r.Static("/static", frontendDir+"/assets")
-
-		r.GET("/", func(c *gin.Context) {
-			c.File(frontendDir + "/index.html")
-		})
+	k, err := kama.New(frontend, "http://localhost:5173", kama.WithStaticPath("frontend/dist"))
+	if err != nil {
+		log.Fatalf("Failed to create kama: %v", err)
 	}
+
+	r.GET("/", func(c *gin.Context) {
+		data, err := frontend.ReadFile("frontend/dist/index.html")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+	})
+	r.GET("/login", func(c *gin.Context) {
+		data, err := frontend.ReadFile("frontend/dist/login.html")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+	})
+	r.GET("/assets/*filepath", gin.WrapH(k.Go()))
+	r.GET("/icon.svg", gin.WrapH(k.Go()))
 
 	addr := fmt.Sprintf(":%s", *port)
 	log.Printf("Server starting on %s", addr)
