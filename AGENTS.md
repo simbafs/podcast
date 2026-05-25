@@ -1,3 +1,5 @@
+這是一個專案雛形，我只寫了一些骨架，你需要根據目標完成後續的規劃，所以你可以很自由的修改目前所有的檔案，但請保留大致架構與分層規劃。
+
 # GOD RULE
 
 YOU MUST FOLLOW TTHE RULES BELOW, NEVER BREAK THEM
@@ -7,6 +9,7 @@ YOU MUST FOLLOW TTHE RULES BELOW, NEVER BREAK THEM
 3. 除了 repository，其他地方的程式不准碰 db
 4. 使用 github.com/samber/do/v2 作 dependencyr injector，具體使用方式參考目前 codebase
 5. 前端檔案使用 nextjs + kama，具體使用方式參考目前 codebase
+6. 嚴格的前後端分離，前後端溝通只透過 json api
 
 # goal
 

@@ -12,7 +12,7 @@ import (
 	"github.com/simbafs/kama/v2"
 )
 
-//go:embed all:ui/dist
+//go:embed all:ui/out
 var uiFs embed.FS
 
 func run(addr string) error {
@@ -23,7 +23,7 @@ func run(addr string) error {
 	do.ProvideValue(i, db.Must())
 	do.Provide(i, repository.NewAccountSqlite)
 
-	k, err := kama.New(uiFs, "localhost:3001", kama.WithStaticPath("ui/dist"))
+	k, err := kama.New(uiFs, "http://localhost:3001", kama.WithStaticPath("ui/out"))
 	if err != nil {
 		return err
 	}
