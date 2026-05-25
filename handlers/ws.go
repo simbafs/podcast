@@ -97,21 +97,33 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 		}, "")
 
 	case "stop":
+		var episodeID string
+		var position float64
 		if state != nil {
+			episodeID = state.EpisodeID
+			position = state.Position
 			mgr.UpdateState(accountID, state.EpisodeID, state.Position, false)
 		}
 		h.broadcast(accountID, session.ServerMessage{
-			Type:    "state",
-			Playing: false,
+			Type:      "state",
+			EpisodeID: episodeID,
+			Position:  position,
+			Playing:   false,
 		}, "")
 
 	case "play":
+		var episodeID string
+		var position float64
 		if state != nil {
+			episodeID = state.EpisodeID
+			position = state.Position
 			mgr.UpdateState(accountID, state.EpisodeID, state.Position, true)
 		}
 		h.broadcast(accountID, session.ServerMessage{
-			Type:    "state",
-			Playing: true,
+			Type:      "state",
+			EpisodeID: episodeID,
+			Position:  position,
+			Playing:   true,
 		}, "")
 
 	case "seek":
