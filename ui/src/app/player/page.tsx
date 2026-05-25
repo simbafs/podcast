@@ -8,7 +8,8 @@ import AudioPlayer from '@/components/AudioPlayer'
 import EpisodeList from '@/components/EpisodeList'
 import SessionIndicator from '@/components/SessionIndicator'
 import ThemeToggle from '@/components/ThemeToggle'
-import { Rss, LogOut, Copy, ArrowUpDown } from 'lucide-react'
+import { Rss, LogOut, Copy, ArrowUpDown, Share2 } from 'lucide-react'
+import ShareDialog from '@/components/ShareDialog'
 
 export default function PlayerPage() {
 	const { accountId, account, loading, create, join, update, logout } = useAccount()
@@ -152,6 +153,7 @@ export default function PlayerPage() {
 		if (accountId) navigator.clipboard.writeText(accountId)
 	}, [accountId])
 
+	const [shareOpen, setShareOpen] = useState(false)
 	const showAccountDialog = !loading && !accountId && !account
 	const audioUrl = currentEpisode?.audio_url || ''
 	const readonly = role !== 'master'
@@ -163,6 +165,13 @@ export default function PlayerPage() {
 
 	return (
 		<>
+			{accountId && (
+				<ShareDialog
+					open={shareOpen}
+					accountId={accountId}
+					onClose={() => setShareOpen(false)}
+				/>
+			)}
 			<AccountDialog open={showAccountDialog} onCreate={create} onJoin={join} />
 
 			{!showAccountDialog && (
@@ -183,6 +192,14 @@ export default function PlayerPage() {
 						</button>
 						<div className="flex items-center gap-2">
 							<ThemeToggle />
+							<button
+								type="button"
+								onClick={() => setShareOpen(true)}
+								aria-label="Share account"
+								className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:hover:bg-zinc-800 dark:hover:text-teal-400"
+							>
+								<Share2 className="h-4 w-4" aria-hidden="true" />
+							</button>
 							<SessionIndicator
 								role={role}
 								connected={connected}
