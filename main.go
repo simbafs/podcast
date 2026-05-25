@@ -7,6 +7,7 @@ import (
 	"podcast/db"
 	"podcast/handlers"
 	"podcast/repository"
+	"podcast/session"
 
 	"github.com/gin-gonic/gin"
 	"github.com/samber/do/v2"
@@ -24,8 +25,15 @@ func run(addr string) error {
 	do.ProvideValue(i, db.Must())
 	do.Provide(i, repository.NewAccountSqlite)
 	do.Provide(i, handlers.NewAccountHandler)
+	do.Provide(i, handlers.NewFeedHandler)
+	do.Provide(i, handlers.NewWSHandler)
+	do.Provide(i, func(i do.Injector) (*session.Manager, error) {
+		return session.NewManager(do.MustInvoke[repository.Account](i)), nil
+	})
 
 	acc := do.MustInvoke[*handlers.AccountHandler](i)
+	feed := do.MustInvoke[*handlers.FeedHandler](i)
+	ws := do.MustInvoke[*handlers.WSHandler](i)
 
 	api := r.Group("/api")
 	{
@@ -33,6 +41,8 @@ func run(addr string) error {
 		api.GET("/accounts/:id", acc.Get)
 		api.PUT("/accounts/:id", acc.Update)
 		api.DELETE("/accounts/:id", acc.Delete)
+		api.GET("/accounts/:id/feed", feed.GetEpisodes)
+		api.GET("/accounts/:id/ws", ws.Handle)
 	}
 
 	k, err := kama.New(uiFs, "http://localhost:3001", kama.WithStaticPath("ui/out"))
