@@ -66,10 +66,10 @@ export default function AudioPlayer({
 
 	useEffect(() => {
 		if (seekTo === undefined) return
+		setPosition(seekTo)
 		const audio = audioRef.current
 		if (!audio || Math.abs(audio.currentTime - seekTo) < 3) return
 		audio.currentTime = seekTo
-		setPosition(seekTo)
 	}, [seekTo])
 
 	const currentIndex = episodes.findIndex((e) => e.guid === currentGuid)
