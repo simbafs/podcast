@@ -287,7 +287,7 @@ export default function PlayerPage() {
 					<AudioPlayer
 						audioUrl={audioUrl}
 						initialPosition={syncPosition}
-						playing={readonly ? syncPlaying : undefined}
+						playing={undefined}
 						seekTo={readonly ? syncPosition : undefined}
 						episodes={sortedEpisodes}
 						currentGuid={currentEpisode?.guid}
