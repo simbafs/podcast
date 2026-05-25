@@ -2,19 +2,19 @@
 package handlers
 
 import (
-	"podcast/db"
+	"podcast/repository"
 
 	"github.com/gin-gonic/gin"
 	"github.com/samber/do/v2"
 )
 
 type AccountHandler struct {
-	db *db.DB
+	accountRepo repository.Account
 }
 
 func NewAccountHandler(i do.Injector) (*AccountHandler, error) {
 	return &AccountHandler{
-		db: do.MustInvoke[*db.DB](i),
+		accountRepo: do.MustInvoke[repository.Account](i),
 	}, nil
 }
 
@@ -22,6 +22,5 @@ func (a *AccountHandler) Create(c *gin.Context) {
 	panic("not implemented")
 }
 
-func (* AccountHandler) Get(c *gin.Context) {
-
+func (*AccountHandler) Get(c *gin.Context) {
 }

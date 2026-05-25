@@ -1,40 +1,51 @@
-這是一個專案雛形，我只寫了一些骨架，你需要根據目標完成後續的規劃，所以你可以很自由的修改目前所有的檔案，但請保留大致架構與分層規劃。
+# Podcast Player — Go + Next.js
 
-# GOD RULE
+Go backend (gin, samber/do, sqlc/SQLite) + Next.js 16 static-export frontend in `ui/`.
 
-YOU MUST FOLLOW TTHE RULES BELOW, NEVER BREAK THEM
+Shared conventions (Go style, Prettier, commit signing, etc.) live in `~/.config/opencode/AGENTS.md`. This file covers only repo-specific guidance.
 
-1. 所有 db 操作都使用 sqlc，寫在 ./db 裡
-2. 所有 db 操作都必須包裝成 repository/ 下定義的 interface， domain 下定義的 struct
-3. 除了 repository，其他地方的程式不准碰 db
-4. 使用 github.com/samber/do/v2 作 dependencyr injector，具體使用方式參考目前 codebase
-5. 前端檔案使用 nextjs + kama，具體使用方式參考目前 codebase
-6. 嚴格的前後端分離，前後端溝通只透過 json api
+## Architecture rules
 
-# goal
+- DB access ONLY through `repository/<name>.go` interfaces using `domain/` structs
+- sqlc queries in `db/query.sql`, schema in `db/schema.sql`
+- DI via `github.com/samber/do/v2` — see `main.go` for the provider/injector pattern
+- JSON API only; frontend is a static export (Next.js `output: "export"`), no SSR
+- Go packages at project root level (no `pkg/`, `internal/`, `cmd/`)
 
-finish a web based podcast player, user create an account (an uuid), then enter an url to rss. The url is bind to the account. Other device with the same account it will see the same rss url and progress (the progress is bind to the account).
-When an account has only one active session, it's the master session. when the second session with the same account id join, it become slave, it can stop, choose episode, seek position, but can not update current playing position. And the slave can take over, it become master, the original master become slave.
+## Dev workflow
 
-# operations
+```bash
+# Terminal 1 — backend on :3000
+go run -tag dev . -addr :3000
 
-## stop/play
+# Terminal 2 — frontend on :3001
+cd ui && pnpm dev
+```
 
-pause the progress and resume
-if no current episode appear(for a newly created account), operation play will be ignored
+- Kill backend: `pkill -f podcast-server` (not `lsof -ti:...`)
+- `kama` middleware in `main.go` proxies unknown routes to the Next.js dev server in dev; serves embedded `ui/out/` in production
+- Build frontend before backend: `cd ui && pnpm build && cd .. && go build`
 
-## seek
+## Current gotchas
 
-jump to specific second in the same epidode
+- **sqlc never configured** — no `sqlc.json`/`sqlc.yaml` exists. You must create one before `sqlc generate` will work
+- **`db/schema.sql` is broken** — trailing comma on `position_sec REAL DEFAULT 0,` line; index references nonexistent `episode_progress` table
+- **`db/query.sql` is empty** — no queries defined yet
 
-## choose
+## Project goal
 
-choose another episode to play
+Web-based podcast player with master/slave session sync:
 
-## takeover
+- Create account (UUID) → bind RSS URL to account
+- Progress (episode, position) bound to account, synced across devices
+- **Master/slave**: first session is master (updates position); second session joins as slave (can stop/seek/choose but NOT update position); slave can `takeover` to become master
 
-must be invoked by a slave, the slave become master, the master become slave
+### Operations
 
-## update
-
-must be invoded by the master, update current state (episode, second in the episode)
+| Operation     | Who         | Effect                                                |
+| ------------- | ----------- | ----------------------------------------------------- |
+| `stop`/`play` | any         | Pause/resume progress (ignored if no current episode) |
+| `seek`        | any         | Jump to second in current episode                     |
+| `choose`      | any         | Pick another episode                                  |
+| `takeover`    | slave only  | Slave becomes master, original master becomes slave   |
+| `update`      | master only | Broadcast current state (episode, position)           |
