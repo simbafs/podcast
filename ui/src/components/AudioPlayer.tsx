@@ -44,11 +44,17 @@ export default function AudioPlayer({
 	useEffect(() => {
 		const audio = audioRef.current
 		if (!audio) return
-		audio.src = audioUrl
-		audio.currentTime = initialPosition
-		audio.volume = volume
 		setPosition(initialPosition)
-		audio.onloadedmetadata = () => setDuration(audio.duration || 0)
+		audio.volume = volume
+		if (!audioUrl) return
+
+		audio.src = audioUrl
+		const onLoaded = () => {
+			audio.currentTime = initialPosition
+			setDuration(audio.duration || 0)
+		}
+		audio.addEventListener('loadedmetadata', onLoaded)
+		return () => audio.removeEventListener('loadedmetadata', onLoaded)
 	}, [audioUrl])
 
 	useEffect(() => {

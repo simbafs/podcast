@@ -30,6 +30,7 @@ export default function PlayerPage() {
 		if (!account) return
 		setRssUrl(account.rss_url)
 		setOrderDir(account.order_dir)
+		setSyncPosition(account.position_sec)
 	}, [account])
 
 	// Fetch episodes when account is ready or RSS URL changes
@@ -59,8 +60,11 @@ export default function PlayerPage() {
 			const ep = episodes.find((e) => e.guid === state.episode_id)
 			if (ep) setCurrentEpisode(ep)
 		}
-		if (state.position_sec !== undefined) setSyncPosition(state.position_sec)
-		if (state.playing !== undefined) setSyncPlaying(state.playing)
+		// Only overwrite position/playing when the server has real state
+		if (state.episode_id) {
+			if (state.position_sec !== undefined) setSyncPosition(state.position_sec)
+			if (state.playing !== undefined) setSyncPlaying(state.playing)
+		}
 	}, [state, episodes])
 
 	// Save RSS URL
