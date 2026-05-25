@@ -3,9 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAccount } from '@/hooks/useAccount'
-import { useMount } from '@/hooks/useMount'
 import { useWebSocket } from '@/hooks/useWebSocket'
-import { getEpisodes, updateAccount, type Episode } from '@/utils/api'
+import { getEpisodes, type Episode } from '@/utils/api'
 import AudioPlayer from '@/components/AudioPlayer'
 import EpisodeList from '@/components/EpisodeList'
 import SessionIndicator from '@/components/SessionIndicator'
@@ -130,6 +129,7 @@ export default function PlayerPage() {
 					audioUrl={audioUrl}
 					initialPosition={syncPosition}
 					playing={readonly ? syncPlaying : undefined}
+					seekTo={readonly ? syncPosition : undefined}
 					onTimeUpdate={handleTimeUpdate}
 					onPlayPause={handlePlayPause}
 					onSeek={handleSeek}

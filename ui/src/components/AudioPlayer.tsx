@@ -9,6 +9,7 @@ interface AudioPlayerProps {
 	onPlayPause?: (playing: boolean) => void
 	onSeek?: (pos: number) => void
 	readonly?: boolean
+	seekTo?: number
 }
 
 export default function AudioPlayer({
@@ -19,6 +20,7 @@ export default function AudioPlayer({
 	onPlayPause,
 	onSeek,
 	readonly,
+	seekTo,
 }: AudioPlayerProps) {
 	const audioRef = useRef<HTMLAudioElement>(null)
 	const [playing, setPlaying] = useState(false)
@@ -49,6 +51,14 @@ export default function AudioPlayer({
 			setPlaying(false)
 		}
 	}, [externalPlaying])
+
+	useEffect(() => {
+		if (seekTo === undefined) return
+		const audio = audioRef.current
+		if (!audio || Math.abs(audio.currentTime - seekTo) < 3) return
+		audio.currentTime = seekTo
+		setPosition(seekTo)
+	}, [seekTo])
 
 	const handleTimeUpdate = useCallback(() => {
 		if (seekingRef.current) return
