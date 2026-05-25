@@ -48,6 +48,7 @@ export default function AudioPlayer({
 	const [duration, setDuration] = useState(0)
 	const [volume, setVolume] = useVolume()
 	const seekingRef = useRef(false)
+	const playingRef = useRef(false)
 
 	useEffect(() => {
 		const audio = audioRef.current
@@ -66,17 +67,39 @@ export default function AudioPlayer({
 	}, [audioUrl])
 
 	useEffect(() => {
+		playingRef.current = externalPlaying === true
+	}, [externalPlaying])
+
+	useEffect(() => {
 		if (externalPlaying === undefined) return
 		const audio = audioRef.current
 		if (!audio) return
-		if (externalPlaying && audio.paused) {
-			audio.play()
-			setPlaying(true)
-		} else if (!externalPlaying && !audio.paused) {
-			audio.pause()
-			setPlaying(false)
+		if (readonly) {
+			// Slave: UI state only, never touch audio element (browser autoplay policy)
+			setPlaying(externalPlaying)
+		} else {
+			// Master: control audio element
+			if (externalPlaying && audio.paused) {
+				const p = audio.play()
+				if (p !== undefined) p.catch(() => {})
+				setPlaying(true)
+			} else if (!externalPlaying && !audio.paused) {
+				audio.pause()
+				setPlaying(false)
+			}
 		}
-	}, [externalPlaying])
+	}, [externalPlaying, readonly])
+
+	// Slave: advance position every 250ms when playing to keep progress bar smooth
+	useEffect(() => {
+		if (!readonly || duration === 0) return
+		const interval = setInterval(() => {
+			if (playingRef.current) {
+				setPosition(prev => Math.min(prev + 0.25, duration))
+			}
+		}, 250)
+		return () => clearInterval(interval)
+	}, [readonly, duration])
 
 	useEffect(() => {
 		if (seekTo === undefined) return
