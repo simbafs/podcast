@@ -16,7 +16,7 @@ Shared conventions (Go style, Prettier, commit signing, etc.) live in `~/.config
 
 ```bash
 # Terminal 1 — backend on :3000
-go run -tag dev . -addr :3000
+go run . --addr :3000
 
 # Terminal 2 — frontend on :3001
 cd ui && pnpm dev
@@ -29,7 +29,6 @@ cd ui && pnpm dev
 ## Current gotchas
 
 - **sqlc never configured** — no `sqlc.json`/`sqlc.yaml` exists. You must create one before `sqlc generate` will work
-- **`db/schema.sql` is broken** — trailing comma on `position_sec REAL DEFAULT 0,` line; index references nonexistent `episode_progress` table
 - **`db/query.sql` is empty** — no queries defined yet
 
 ## Project goal
@@ -40,12 +39,25 @@ Web-based podcast player with master/slave session sync:
 - Progress (episode, position) bound to account, synced across devices
 - **Master/slave**: first session is master (updates position); second session joins as slave (can stop/seek/choose but NOT update position); slave can `takeover` to become master
 
-### Operations
+### API
 
-| Operation     | Who         | Effect                                                |
-| ------------- | ----------- | ----------------------------------------------------- |
-| `stop`/`play` | any         | Pause/resume progress (ignored if no current episode) |
-| `seek`        | any         | Jump to second in current episode                     |
-| `choose`      | any         | Pick another episode                                  |
-| `takeover`    | slave only  | Slave becomes master, original master becomes slave   |
-| `update`      | master only | Broadcast current state (episode, position)           |
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/accounts` | POST | Create account (returns UUID) |
+| `/api/accounts/:id` | GET | Get account |
+| `/api/accounts/:id` | PUT | Update account (rss_url, etc.) |
+| `/api/accounts/:id` | DELETE | Delete account |
+| `/api/accounts/:id/feed` | GET | Fetch RSS feed as JSON episodes |
+| `/api/accounts/:id/ws` | GET | WebSocket for real-time sync |
+
+### WebSocket protocol
+
+| Direction | Type | Payload | Note |
+|---|---|---|---|
+| any → server | `stop` / `play` | — | toggle playback |
+| any → server | `seek` | `{position_sec}` | jump to time |
+| any → server | `choose` | `{episode_id}` | switch episode |
+| slave → server | `takeover` | — | requesting slave becomes master |
+| master → server | `update` | `{episode_id, position_sec}` | broadcast state (rate-limited ~5s) |
+| server → all | `state` | `{master_id, episode_id, position, playing}` | current state |
+| server → one | `role` | `{role: "master"\|"slave"}` | assigned on connect |
