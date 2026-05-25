@@ -1,79 +1,37 @@
-# Podcast Sync - Agent Instructions
+# GOD RULE
 
-## Project Overview
-Go + SQLite + WebSocket podcast sync server with React frontend.
+YOU MUST FOLLOW TTHE RULES BELOW, NEVER BREAK THEM
 
-## Run Commands
+1. 所有 db 操作都使用 sqlc，寫在 ./db 裡
+2. 所有 db 操作都必須包裝成 repository/ 下定義的 interface， domain 下定義的 struct
+3. 除了 repository，其他地方的程式不准碰 db
+4. 使用 github.com/samber/do/v2 作 dependencyr injector，具體使用方式參考目前 codebase
+5. 前端檔案使用 nextjs + kama，具體使用方式參考目前 codebase
 
-```bash
-# Build and run server
-cd frontend && pnpm build && cd .. && go build -o server . && ./server -db ./data/podcast.db -port 8080
+# goal
 
-# Frontend dev
-cd frontend && pnpm install && pnpm dev
+finish a web based podcast player, user create an account (an uuid), then enter an url to rss. The url is bind to the account. Other device with the same account it will see the same rss url and progress (the progress is bind to the account).
+When an account has only one active session, it's the master session. when the second session with the same account id join, it become slave, it can stop, choose episode, seek position, but can not update current playing position. And the slave can take over, it become master, the original master become slave.
 
-# Dev mode (kama proxies to Vite dev server)
-go run -tags dev .
-```
+# operations
 
-**Build order matters**: `pnpm build` must run before `go build` so `frontend/dist/` exists.
+## stop/play
 
-## Directory Structure
+pause the progress and resume
+if no current episode appear(for a newly created account), operation play will be ignored
 
-| Directory | Purpose |
-|-----------|---------|
-| `main.go` | Server entry point |
-| `db/` | SQLite connection + schema (embed via go:embed) |
-| `handler/` | REST API handlers |
-| `player/` | In-memory playback state manager |
-| `ws/` | WebSocket hub |
-| `frontend/` | React + Vite source code |
-| `frontend/dist/` | Compiled static assets (embed into Go binary) |
+## seek
 
-## Key Endpoints
+jump to specific second in the same epidode
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | Frontend (React app) |
-| GET | `/login` | Login page (separate entry) |
-| GET | `/ws` | WebSocket upgrade |
-| GET | `/api/state?accountId=` | Get account state |
-| POST | `/api/feed` | Save RSS URL + order |
-| POST | `/api/takeover` | Reset active connection |
-| PATCH | `/api/progress` | Update episode progress |
-| GET | `/api/proxy?url=` | RSS proxy (CORS bypass) |
+## choose
 
-## Database
-- SQLite at `./data/podcast.db` (auto-created + schema applied on first run)
+choose another episode to play
 
-## WebSocket Protocol
+## takeover
 
-Client → Server:
-```json
-{"type": "auth", "accountId": "xxx", "connId": "client-generated-id"}
-{"type": "play", "episodeId": "ep-1"}
-{"type": "pause"}
-{"type": "seek", "positionSec": 120.5}
-{"type": "takeover"}
-{"type": "sync", "episodeId": "ep-1", "positionSec": 45.0, "isPlaying": true}
-```
+must be invoked by a slave, the slave become master, the master become slave
 
-Server → Client:
-```json
-{"type": "connected", "connId": "conn-xxx"}
-{"type": "state", "activeConnId": "...", "episodeId": "...", "positionSec": ..., "isPlaying": true/false}
-{"type": "error", "message": "..."}
-```
+## update
 
-## Frontend Architecture
-- Two entry points (`index.html` + `login.html`), no SPA router
-- `main.tsx` renders Home page; `login.tsx` renders LoginPage
-- Auth check: App checks `localStorage` for accountId, redirects to `/login` if missing
-- Login page calls `setAccountId()` then redirects to `/`
-
-## Gotchas
-- Active connection断线后**不自动指定**新播放者，需手动 takeover
-- 只有 active connection 的 sync 消息会被接受并广播
-- SQLite via `modernc.org/sqlite3` (requires CGO)
-- 每次修改 `frontend/` 后需重新 `pnpm build` 才能更新 `frontend/dist/`
-- `/` 和 `/login` 是分別的 vite entry points，不是 SPA
+must be invoded by the master, update current state (episode, second in the episode)
