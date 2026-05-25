@@ -54,7 +54,7 @@ type ServerMessage struct {
 	MasterID  string  `json:"master_id,omitempty"`
 	EpisodeID string  `json:"episode_id,omitempty"`
 	Position  float64 `json:"position_sec,omitempty"`
-	Playing   bool    `json:"playing,omitempty"`
+	Playing   *bool   `json:"playing,omitempty"`
 	Role      string  `json:"role,omitempty"`
 }
 

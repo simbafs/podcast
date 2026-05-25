@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func boolPtr(b bool) *bool { return &b }
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
@@ -54,7 +56,7 @@ func (h *WSHandler) Handle(c *gin.Context) {
 			MasterID:  state.MasterID,
 			EpisodeID: state.EpisodeID,
 			Position:  state.Position,
-			Playing:   state.Playing,
+			Playing:   &state.Playing,
 		})
 	}
 
@@ -93,7 +95,7 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 			MasterID:  s.ID,
 			EpisodeID: cm.EpisodeID,
 			Position:  cm.Position,
-			Playing:   true,
+			Playing:   boolPtr(true),
 		}, "")
 
 	case "stop":
@@ -108,7 +110,7 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 			Type:      "state",
 			EpisodeID: episodeID,
 			Position:  position,
-			Playing:   false,
+			Playing:   boolPtr(false),
 		}, "")
 
 	case "play":
@@ -123,7 +125,7 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 			Type:      "state",
 			EpisodeID: episodeID,
 			Position:  position,
-			Playing:   true,
+			Playing:   boolPtr(true),
 		}, "")
 
 	case "seek":
@@ -143,7 +145,7 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 			Type:      "state",
 			EpisodeID: cm.EpisodeID,
 			Position:  0,
-			Playing:   true,
+			Playing:   boolPtr(true),
 		}, "")
 
 	case "takeover":
