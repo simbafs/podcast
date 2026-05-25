@@ -63,13 +63,9 @@ func main() {
 	})
 
 	dir, _ := os.Getwd()
-	frontendDir := dir + "/frontend"
+	frontendDir := dir + "/public"
 	if _, err := os.Stat(frontendDir); err == nil {
-		r.Static("/static", frontendDir)
-
-		r.GET("/login", func(c *gin.Context) {
-			c.File(frontendDir + "/login.html")
-		})
+		r.Static("/static", frontendDir+"/assets")
 
 		r.GET("/", func(c *gin.Context) {
 			c.File(frontendDir + "/index.html")

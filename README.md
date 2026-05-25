@@ -14,57 +14,54 @@ Cross-device podcast playback sync built on Go + SQLite + WebSocket.
 
 - **Backend**: Go + Gin + gorilla/websocket
 - **Database**: SQLite (modernc.org/sqlite3)
-- **Frontend**: Vanilla JavaScript + WebSocket
+- **Frontend**: React 19 + Vite + TailwindCSS v4 + daisyUI v5
 
 ## 專案結構
 
 ```
-cmd/server/main.go       # 入口點
-db/schema.sql           # 資料庫 schema
-internal/
-├── handler/            # REST API handlers
-│   ├── state.go        # /api/state
-│   └── feed.go         # /api/feed, /api/takeover
-├── player/             # Playback manager (in-memory)
-│   └── manager.go
-├── ws/                 # WebSocket hub
-│   └── hub.go
-├── db/                 # SQLite 連線
-│   └── db.go
-└── types.go            # 共用類型
-frontend/               # 靜態前端
-├── index.html
-├── main.js
-└── global.css
+main.go              # 入口點
+db/schema.sql        # 資料庫 schema (embed 至執行檔)
+db/db.go             # SQLite 連線
+handler/             # REST API handlers
+  state.go           # /api/state
+  feed.go            # /api/feed, /api/takeover
+player/              # Playback manager (in-memory)
+ws/                  # WebSocket hub
+frontend/            # React 前端原始碼 (Vite)
+  src/
+    pages/          # React pages
+    hooks/          # Custom hooks
+    components/     # UI components
+    lib/             # API, RSS parsing, storage
+public/              # 編譯後的 static assets (由 Vite 輸出)
 ```
 
-## 本地開發
+## 前端開發
+
+```bash
+cd frontend
+
+# 安裝依賴
+pnpm install
+
+# 開發模式
+pnpm dev
+
+# 編譯 (輸出至 ../public/)
+pnpm build
+```
+
+## 後端執行
 
 ```bash
 # 編譯
-go build -o server ./cmd/server
+go build -o server .
 
-# 執行（自動建立 data/podcast.db）
+# 執行（自動建立 data/podcast.db 並執行 schema）
 ./server -db ./data/podcast.db -port 8080
 ```
 
 開啟 `http://localhost:8080`
-
-## Docker
-
-```bash
-# 編譯映像
-docker build -t podcast-sync .
-
-# 執行
-docker run -p 8080:8080 -v ./data:/data podcast-sync
-```
-
-或使用 docker compose：
-
-```bash
-docker compose up -d
-```
 
 ## WebSocket 訊息協議
 

@@ -1,37 +1,38 @@
 # Podcast Sync - Agent Instructions
 
 ## Project Overview
-Go + SQLite + WebSocket podcast sync server with vanilla JS frontend.
+Go + SQLite + WebSocket podcast sync server with React frontend.
 
 ## Run Commands
 
 ```bash
-# Build and run locally
+# Build and run server
 go build -o server . && ./server -db ./data/podcast.db -port 8080
 
-# Docker
-docker compose up -d
-```
+# Frontend dev
+cd frontend && pnpm install && pnpm dev
 
-**Note**: Entry point is `./main.go` at root (not `./cmd/server` as some docs claim - the Dockerfile has this bug).
+# Frontend build (outputs to ../public/)
+cd frontend && pnpm build
+```
 
 ## Directory Structure
 
 | Directory | Purpose |
 |-----------|---------|
 | `main.go` | Server entry point |
-| `db/` | SQLite connection + schema |
-| `handler/` | REST API handlers (state, feed, takeover) |
+| `db/` | SQLite connection + schema (embed via go:embed) |
+| `handler/` | REST API handlers |
 | `player/` | In-memory playback state manager |
-| `ws/` | WebSocket hub and client handling |
-| `frontend/` | Static HTML/JS/CSS |
+| `ws/` | WebSocket hub |
+| `frontend/` | React + Vite source code |
+| `public/` | Compiled static assets |
 
 ## Key Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | Frontend index.html |
-| GET | `/login` | Login page |
+| GET | `/` | Frontend (React SPA) |
 | GET | `/ws` | WebSocket upgrade |
 | GET | `/api/state?accountId=` | Get account state |
 | POST | `/api/feed` | Save RSS URL + order |
@@ -40,8 +41,7 @@ docker compose up -d
 | GET | `/api/proxy?url=` | RSS proxy (CORS bypass) |
 
 ## Database
-- SQLite at `./data/podcast.db` (auto-created on first run)
-- Schema in `db/schema.sql`
+- SQLite at `./data/podcast.db` (auto-created + schema applied on first run)
 
 ## WebSocket Protocol
 
@@ -65,4 +65,5 @@ Server → Client:
 ## Gotchas
 - Active connection断线后**不自动指定**新播放者，需手动 takeover
 - 只有 active connection 的 sync 消息会被接受并广播
-- SQLite via `modernc.org/sqlite3` (requires CGO, see Dockerfile)
+- SQLite via `modernc.org/sqlite3` (requires CGO)
+- 每次修改 `frontend/` 后需重新 `pnpm build` 才能更新 `public/`
