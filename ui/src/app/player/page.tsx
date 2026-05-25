@@ -154,9 +154,9 @@ export default function PlayerPage() {
 			<AccountDialog open={showAccountDialog} onCreate={create} onJoin={join} />
 
 			{!showAccountDialog && (
-				<div className="mx-auto flex min-h-screen max-w-2xl flex-col">
+				<div className="mx-auto flex h-screen max-w-2xl flex-col overflow-hidden">
 					{/* Utility bar */}
-					<div className="flex items-center justify-between border-b px-4 py-1.5 text-xs text-zinc-500">
+					<div className="flex shrink-0 items-center justify-between border-b px-4 py-1.5 text-xs text-zinc-500">
 						<button
 							type="button"
 							onClick={copyId}
@@ -178,7 +178,7 @@ export default function PlayerPage() {
 					</div>
 
 					{/* RSS control block */}
-					<div className="border-b px-4 py-3">
+					<div className="shrink-0 border-b px-4 py-3">
 						<form onSubmit={handleSaveRss} className="flex gap-2">
 							<input
 								type="url"
@@ -210,7 +210,7 @@ export default function PlayerPage() {
 					</div>
 
 					{/* Episode list */}
-					<main className="flex-1 overflow-y-auto">
+					<main className="min-h-0 flex-1 overflow-y-auto">
 						{episodes.length === 0 ? (
 							<p className="p-8 text-center text-sm text-zinc-500">
 								{rssUrl ? 'No episodes found.' : 'Enter an RSS URL above to load episodes.'}
