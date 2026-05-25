@@ -1,10 +1,19 @@
 'use client'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface AccountDialogProps {
 	open: boolean
 	onCreate: () => Promise<unknown>
 	onJoin: (id: string) => Promise<unknown>
+}
+
+function useDialogOpen(ref: React.RefObject<HTMLDialogElement | null>, open: boolean) {
+	useEffect(() => {
+		const el = ref.current
+		if (!el) return
+		if (open && !el.open) el.showModal()
+		else if (!open && el.open) el.close()
+	}, [open, ref])
 }
 
 export default function AccountDialog({ open, onCreate, onJoin }: AccountDialogProps) {
@@ -13,11 +22,7 @@ export default function AccountDialog({ open, onCreate, onJoin }: AccountDialogP
 	const [err, setErr] = useState('')
 	const [busy, setBusy] = useState(false)
 
-	const dialog = ref.current
-	if (dialog) {
-		if (open && !dialog.open) dialog.showModal()
-		else if (!open && dialog.open) dialog.close()
-	}
+	useDialogOpen(ref, open)
 
 	const handleCreate = async () => {
 		setBusy(true)

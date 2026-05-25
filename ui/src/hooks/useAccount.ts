@@ -1,15 +1,14 @@
 'use client'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createAccount, getAccount, updateAccount, type Account } from '@/utils/api'
 import { useLocalStorage } from './useLocalStorage'
-import { useMount } from './useMount'
 
 export function useAccount() {
 	const [accountId, setAccountId] = useLocalStorage<string>('account_id', '')
 	const [account, setAccount] = useState<Account | null>(null)
 	const [loading, setLoading] = useState(false)
 
-	useMount(() => {
+	useEffect(() => {
 		if (accountId) {
 			setLoading(true)
 			getAccount(accountId)
@@ -17,7 +16,7 @@ export function useAccount() {
 				.catch(() => setAccountId(''))
 				.finally(() => setLoading(false))
 		}
-	})
+	}, [accountId])
 
 	const create = useCallback(async () => {
 		const acc = await createAccount()
