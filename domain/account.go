@@ -1,4 +1,3 @@
-// package domain contain the core types of the application
 package domain
 
 type Account struct {
@@ -6,7 +5,7 @@ type Account struct {
 	RSSURL         string
 	Order          string
 	CurrentEpisode string
-	Position       int // sec from start
+	Position       float64
 }
 
 

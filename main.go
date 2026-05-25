@@ -5,6 +5,7 @@ import (
 	"flag"
 
 	"podcast/db"
+	"podcast/handlers"
 	"podcast/repository"
 
 	"github.com/gin-gonic/gin"
@@ -22,18 +23,22 @@ func run(addr string) error {
 
 	do.ProvideValue(i, db.Must())
 	do.Provide(i, repository.NewAccountSqlite)
+	do.Provide(i, handlers.NewAccountHandler)
+
+	acc := do.MustInvoke[*handlers.AccountHandler](i)
+
+	api := r.Group("/api")
+	{
+		api.POST("/accounts", acc.Create)
+		api.GET("/accounts/:id", acc.Get)
+		api.PUT("/accounts/:id", acc.Update)
+		api.DELETE("/accounts/:id", acc.Delete)
+	}
 
 	k, err := kama.New(uiFs, "http://localhost:3001", kama.WithStaticPath("ui/out"))
 	if err != nil {
 		return err
 	}
-
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "pong",
-		})
-	})
-
 	r.Use(k.Gin())
 
 	return r.Run(addr)
