@@ -133,12 +133,18 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 		}, "")
 
 	case "seek":
+		var episodeID string
+		var playing bool
 		if state != nil {
+			episodeID = state.EpisodeID
+			playing = state.Playing
 			mgr.UpdateState(accountID, state.EpisodeID, cm.Position, state.Playing)
 		}
 		h.broadcast(accountID, session.ServerMessage{
-			Type:     "state",
-			Position: cm.Position,
+			Type:      "state",
+			EpisodeID: episodeID,
+			Position:  cm.Position,
+			Playing:   boolPtr(playing),
 		}, "")
 
 	case "choose":
