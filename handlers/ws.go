@@ -2,32 +2,31 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"podcast/session"
 
 	"github.com/gorilla/websocket"
 	"github.com/samber/do/v2"
+	"github.com/samber/lo"
 
 	"github.com/gin-gonic/gin"
 )
 
-func boolPtr(b bool) *bool { return &b }
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
 type WSHandler struct {
-	mgr *session.Manager
+	mgr      *session.Manager
+	upgrader websocket.Upgrader
 }
 
 func NewWSHandler(i do.Injector) (*WSHandler, error) {
 	return &WSHandler{
 		mgr: do.MustInvoke[*session.Manager](i),
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
+		},
 	}, nil
 }
 
@@ -38,9 +37,9 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("ws upgrade: %v", err)
+		slog.Error("ws upgrade", "error", err)
 		return
 	}
 
@@ -68,11 +67,15 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
+			if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				slog.Error("ws read", "account", accountID, "error", err)
+			}
 			break
 		}
 
 		var cm session.ClientMessage
 		if err := json.Unmarshal(msg, &cm); err != nil {
+			slog.Warn("ws unmarshal", "account", accountID, "error", err)
 			continue
 		}
 
@@ -99,7 +102,7 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 			MasterID:  s.ID,
 			EpisodeID: cm.EpisodeID,
 			Position:  cm.Position,
-			Playing:   boolPtr(playing),
+			Playing:   lo.ToPtr(playing),
 		}, "")
 
 	case "stop":
@@ -114,7 +117,7 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 			Type:      "state",
 			EpisodeID: episodeID,
 			Position:  position,
-			Playing:   boolPtr(false),
+			Playing:   lo.ToPtr(false),
 		}, "")
 
 	case "play":
@@ -129,7 +132,7 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 			Type:      "state",
 			EpisodeID: episodeID,
 			Position:  position,
-			Playing:   boolPtr(true),
+			Playing:   lo.ToPtr(true),
 		}, "")
 
 	case "seek":
@@ -144,7 +147,7 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 			Type:      "state",
 			EpisodeID: episodeID,
 			Position:  cm.Position,
-			Playing:   boolPtr(playing),
+			Playing:   lo.ToPtr(playing),
 		}, "")
 
 	case "choose":
@@ -155,7 +158,7 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 			Type:      "state",
 			EpisodeID: cm.EpisodeID,
 			Position:  0,
-			Playing:   boolPtr(true),
+			Playing:   lo.ToPtr(true),
 		}, "")
 
 	case "takeover":
@@ -196,6 +199,6 @@ func (h *WSHandler) broadcast(accountID string, msg session.ServerMessage, exclu
 
 func (h *WSHandler) writeJSON(conn *websocket.Conn, msg any) {
 	if err := conn.WriteJSON(msg); err != nil {
-		log.Printf("ws write: %v", err)
+		slog.Error("ws write", "error", err)
 	}
 }

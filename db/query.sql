@@ -14,7 +14,7 @@ WHERE id = ?
 RETURNING *;
 
 -- name: UpdatePosition :exec
-UPDATE accounts SET position_sec = ? WHERE id = ?;
+UPDATE accounts SET current_episode_id = ?, position_sec = ? WHERE id = ?;
 
 -- name: DeleteAccount :exec
 DELETE FROM accounts WHERE id = ?;

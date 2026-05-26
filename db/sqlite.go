@@ -1,33 +1,27 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	_ "embed"
-	"log"
 
 	_ "modernc.org/sqlite"
+	"github.com/samber/oops"
 )
 
 //go:embed schema.sql
 var schema string
 
-type DB struct {
-	db *sql.DB
-}
-
-func Must() *DB {
-	db, err := sql.Open("sqlite", "file:podcast.db")
+func Open() (*sql.DB, error) {
+	d, err := sql.Open("sqlite", "file:podcast.db")
 	if err != nil {
-		panic(err)
+		return nil, oops.In("db").Tags("database", "sqlite").Wrapf(err, "open sqlite")
 	}
 
-	if _, err := db.Exec(schema); err != nil {
-		log.Printf("db: migrate: %v", err)
+	if _, err := d.ExecContext(context.Background(), schema); err != nil {
+		d.Close()
+		return nil, oops.In("db").Tags("database", "sqlite").Wrapf(err, "migrate")
 	}
 
-	return &DB{db: db}
-}
-
-func (d *DB) SQLDB() *sql.DB {
-	return d.db
+	return d, nil
 }

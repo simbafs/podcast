@@ -2,7 +2,7 @@ package session
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/samber/oops"
 )
 
 type Role int
@@ -64,6 +65,8 @@ type Manager struct {
 	states   map[string]*State
 	repo     repository.Account
 	stopCh   chan struct{}
+	doneCh   chan struct{}
+	stopOnce sync.Once
 }
 
 func NewManager(repo repository.Account) *Manager {
@@ -72,13 +75,17 @@ func NewManager(repo repository.Account) *Manager {
 		states:   make(map[string]*State),
 		repo:     repo,
 		stopCh:   make(chan struct{}),
+		doneCh:   make(chan struct{}),
 	}
-	go m.flushLoop()
+	go m.flushLoopGuard()
 	return m
 }
 
 func (m *Manager) Stop() {
-	close(m.stopCh)
+	m.stopOnce.Do(func() {
+		close(m.stopCh)
+		<-m.doneCh // wait for final flush to complete
+	})
 }
 
 func (m *Manager) Connect(accountID string, conn *websocket.Conn) *Session {
@@ -173,6 +180,7 @@ func (m *Manager) UpdateState(accountID string, episodeID string, position float
 
 	state := m.states[accountID]
 	if state == nil {
+		slog.Warn("UpdateState called without Connect", "account_id", accountID)
 		return
 	}
 	state.EpisodeID = episodeID
@@ -181,7 +189,14 @@ func (m *Manager) UpdateState(accountID string, episodeID string, position float
 	state.Dirty = true
 }
 
+func (m *Manager) flushLoopGuard() {
+	if err := oops.In("session-manager").Code("flush_loop_panic").Recover(m.flushLoop); err != nil {
+		slog.Error("flush loop recovered from panic", slog.Any("error", err))
+	}
+}
+
 func (m *Manager) flushLoop() {
+	defer close(m.doneCh)
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -196,8 +211,7 @@ func (m *Manager) flushLoop() {
 }
 
 func (m *Manager) flush() {
-	m.mu.RLock()
-	// Snapshot dirty states
+	m.mu.Lock()
 	type dirtyEntry struct {
 		id       string
 		position float64
@@ -210,19 +224,17 @@ func (m *Manager) flush() {
 			state.Dirty = false
 		}
 	}
-	m.mu.RUnlock()
+	m.mu.Unlock()
 
 	ctx := context.Background()
 	for _, d := range dirty {
-		acc, err := m.repo.Get(ctx, d.id)
-		if err != nil {
-			log.Printf("flush: get account %s: %v", d.id, err)
-			continue
-		}
-		acc.CurrentEpisode = d.episode
-		acc.Position = d.position
-		if err := m.repo.Update(ctx, acc); err != nil {
-			log.Printf("flush: update account %s: %v", d.id, err)
+		if err := m.repo.UpdatePosition(ctx, d.id, d.episode, d.position); err != nil {
+			slog.Error("flush: update position", "account", d.id, "error", err)
+			m.mu.Lock()
+			if state, ok := m.states[d.id]; ok {
+				state.Dirty = true
+			}
+			m.mu.Unlock()
 		}
 	}
 }

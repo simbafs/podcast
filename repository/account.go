@@ -2,12 +2,14 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 
 	"podcast/db"
 	"podcast/domain"
 
 	"github.com/google/uuid"
 	"github.com/samber/do/v2"
+	"github.com/samber/oops"
 )
 
 type Account interface {
@@ -15,16 +17,16 @@ type Account interface {
 	Get(ctx context.Context, id string) (*domain.Account, error)
 	Update(ctx context.Context, account *domain.Account) error
 	Delete(ctx context.Context, id string) error
+	UpdatePosition(ctx context.Context, id string, episodeID string, position float64) error
 }
 
 type accountSqlite struct {
-	db  *db.DB
 	sql *db.Queries
 }
 
 func NewAccountSqlite(i do.Injector) (Account, error) {
-	d := do.MustInvoke[*db.DB](i)
-	return &accountSqlite{db: d, sql: db.New(d.SQLDB())}, nil
+	d := do.MustInvoke[*sql.DB](i)
+	return &accountSqlite{sql: db.New(d)}, nil
 }
 
 func toDomain(a db.Account) *domain.Account {
@@ -38,10 +40,12 @@ func toDomain(a db.Account) *domain.Account {
 }
 
 func (a *accountSqlite) Create(ctx context.Context) (*domain.Account, error) {
-	// Before: was panic("not implemented") — sqlc handles INSERT
 	account, err := a.sql.CreateAccount(ctx, uuid.NewString())
 	if err != nil {
-		return nil, err
+		return nil, oops.
+			In("repository").
+			Tags("database", "sqlite").
+			Wrapf(err, "create account")
 	}
 	return toDomain(account), nil
 }
@@ -49,7 +53,11 @@ func (a *accountSqlite) Create(ctx context.Context) (*domain.Account, error) {
 func (a *accountSqlite) Get(ctx context.Context, id string) (*domain.Account, error) {
 	account, err := a.sql.GetAccount(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, oops.
+			In("repository").
+			Tags("database", "sqlite").
+			With("account_id", id).
+			Wrapf(err, "get account")
 	}
 	return toDomain(account), nil
 }
@@ -62,9 +70,39 @@ func (a *accountSqlite) Update(ctx context.Context, account *domain.Account) err
 		PositionSec:      account.Position,
 		ID:               account.ID,
 	})
-	return err
+	if err != nil {
+		return oops.
+			In("repository").
+			Tags("database", "sqlite").
+			With("account_id", account.ID).
+			Wrapf(err, "update account")
+	}
+	return nil
 }
 
 func (a *accountSqlite) Delete(ctx context.Context, id string) error {
-	return a.sql.DeleteAccount(ctx, id)
+	if err := a.sql.DeleteAccount(ctx, id); err != nil {
+		return oops.
+			In("repository").
+			Tags("database", "sqlite").
+			With("account_id", id).
+			Wrapf(err, "delete account")
+	}
+	return nil
+}
+
+func (a *accountSqlite) UpdatePosition(ctx context.Context, id string, episodeID string, position float64) error {
+	if err := a.sql.UpdatePosition(ctx, db.UpdatePositionParams{
+		CurrentEpisodeID: episodeID,
+		PositionSec:      position,
+		ID:               id,
+	}); err != nil {
+		return oops.
+			In("repository").
+			Tags("database", "sqlite").
+			With("account_id", id).
+			With("episode_id", episodeID).
+			Wrapf(err, "update position")
+	}
+	return nil
 }

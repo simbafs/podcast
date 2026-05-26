@@ -90,15 +90,16 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) (A
 }
 
 const updatePosition = `-- name: UpdatePosition :exec
-UPDATE accounts SET position_sec = ? WHERE id = ?
+UPDATE accounts SET current_episode_id = ?, position_sec = ? WHERE id = ?
 `
 
 type UpdatePositionParams struct {
-	PositionSec float64
-	ID          string
+	CurrentEpisodeID string
+	PositionSec      float64
+	ID               string
 }
 
 func (q *Queries) UpdatePosition(ctx context.Context, arg UpdatePositionParams) error {
-	_, err := q.db.ExecContext(ctx, updatePosition, arg.PositionSec, arg.ID)
+	_, err := q.db.ExecContext(ctx, updatePosition, arg.CurrentEpisodeID, arg.PositionSec, arg.ID)
 	return err
 }
