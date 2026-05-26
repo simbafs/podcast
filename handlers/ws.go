@@ -45,17 +45,15 @@ func (h *WSHandler) Handle(c *gin.Context) {
 
 	s := h.mgr.Connect(accountID, conn)
 
-	// Send role assignment
 	h.writeJSON(conn, session.ServerMessage{Type: "role", Role: s.Role.String()})
 
-	// Send current state if available
 	if state := h.mgr.GetState(accountID); state != nil {
 		h.writeJSON(conn, session.ServerMessage{
 			Type:      "state",
 			MasterID:  state.MasterID,
 			EpisodeID: state.EpisodeID,
 			Position:  state.Position,
-			Playing:   &state.Playing,
+			Playing:   lo.ToPtr(state.Playing),
 		})
 	}
 
@@ -85,91 +83,56 @@ func (h *WSHandler) Handle(c *gin.Context) {
 
 func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm session.ClientMessage) {
 	mgr := h.mgr
-	state := mgr.GetState(accountID)
 
 	switch cm.Type {
-	case "update":
+	case "state":
+		// Only master can report authoritative state
 		if s.Role != session.RoleMaster {
-			return // slave cannot update
+			return
 		}
-		playing := true
-		if state != nil {
-			playing = state.Playing
+		if cm.Playing == nil {
+			return
 		}
-		mgr.UpdateState(accountID, cm.EpisodeID, cm.Position, playing)
+		episodeID := cm.EpisodeID
+		if episodeID == "" {
+			if state := mgr.GetState(accountID); state != nil {
+				episodeID = state.EpisodeID
+			}
+		}
+		if err := mgr.ApplyState(accountID, episodeID, cm.Position, *cm.Playing); err != nil {
+			slog.Error("apply state", "account", accountID, "error", err)
+			return
+		}
+		state := mgr.GetState(accountID)
 		h.broadcast(accountID, session.ServerMessage{
 			Type:      "state",
 			MasterID:  s.ID,
-			EpisodeID: cm.EpisodeID,
-			Position:  cm.Position,
-			Playing:   lo.ToPtr(playing),
-		}, "")
+			EpisodeID: state.EpisodeID,
+			Position:  state.Position,
+			Playing:   lo.ToPtr(state.Playing),
+		}, s.ID)
 
-	case "stop":
-		var episodeID string
-		var position float64
-		if state != nil {
-			episodeID = state.EpisodeID
-			position = state.Position
-			mgr.UpdateState(accountID, state.EpisodeID, state.Position, false)
-		}
-		h.broadcast(accountID, session.ServerMessage{
-			Type:      "state",
-			EpisodeID: episodeID,
-			Position:  position,
-			Playing:   lo.ToPtr(false),
-		}, "")
+	case "play", "pause", "seek", "choose":
+		// Any role: relay command to all other sessions (no server state mutation)
+		h.relay(accountID, cm, s.ID)
 
-	case "play":
-		var episodeID string
-		var position float64
-		if state != nil {
-			episodeID = state.EpisodeID
-			position = state.Position
-			mgr.UpdateState(accountID, state.EpisodeID, state.Position, true)
+	case "rss":
+		// Persist RSS URL to DB, then relay to all other sessions
+		if cm.URL != "" {
+			if err := mgr.ApplyRSS(accountID, cm.URL); err != nil {
+				slog.Error("apply rss", "account", accountID, "error", err)
+			}
 		}
-		h.broadcast(accountID, session.ServerMessage{
-			Type:      "state",
-			EpisodeID: episodeID,
-			Position:  position,
-			Playing:   lo.ToPtr(true),
-		}, "")
-
-	case "seek":
-		var episodeID string
-		var playing bool
-		if state != nil {
-			episodeID = state.EpisodeID
-			playing = state.Playing
-			mgr.UpdateState(accountID, state.EpisodeID, cm.Position, state.Playing)
-		}
-		h.broadcast(accountID, session.ServerMessage{
-			Type:      "state",
-			EpisodeID: episodeID,
-			Position:  cm.Position,
-			Playing:   lo.ToPtr(playing),
-		}, "")
-
-	case "choose":
-		if state != nil {
-			mgr.UpdateState(accountID, cm.EpisodeID, 0, true)
-		}
-		h.broadcast(accountID, session.ServerMessage{
-			Type:      "state",
-			EpisodeID: cm.EpisodeID,
-			Position:  0,
-			Playing:   lo.ToPtr(true),
-		}, "")
+		h.relay(accountID, cm, s.ID)
 
 	case "takeover":
 		if s.Role != session.RoleSlave {
-			return // only slave can takeover
+			return
 		}
 		newMasterID := mgr.Takeover(accountID, s.ID)
 		if newMasterID == "" {
 			return
 		}
-		// Notify all sessions of role change
 		for _, sess := range mgr.GetSessions(accountID) {
 			role := "slave"
 			if sess.ID == newMasterID {
@@ -180,7 +143,6 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 				Role: role,
 			})
 		}
-		// Broadcast takeover event
 		h.broadcast(accountID, session.ServerMessage{
 			Type:     "taken_over",
 			MasterID: newMasterID,
@@ -188,6 +150,17 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 	}
 }
 
+// relay sends the raw message to all sessions except the sender.
+func (h *WSHandler) relay(accountID string, msg any, excludeID string) {
+	for _, s := range h.mgr.GetSessions(accountID) {
+		if s.ID == excludeID {
+			continue
+		}
+		h.writeJSON(s.Conn, msg)
+	}
+}
+
+// broadcast sends a ServerMessage to all sessions except the sender.
 func (h *WSHandler) broadcast(accountID string, msg session.ServerMessage, excludeID string) {
 	for _, s := range h.mgr.GetSessions(accountID) {
 		if s.ID == excludeID {

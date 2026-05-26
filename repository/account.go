@@ -18,6 +18,7 @@ type Account interface {
 	Update(ctx context.Context, account *domain.Account) error
 	Delete(ctx context.Context, id string) error
 	UpdatePosition(ctx context.Context, id string, episodeID string, position float64) error
+	UpdateRSS(ctx context.Context, id string, url string) error
 }
 
 type accountSqlite struct {
@@ -87,6 +88,20 @@ func (a *accountSqlite) Delete(ctx context.Context, id string) error {
 			Tags("database", "sqlite").
 			With("account_id", id).
 			Wrapf(err, "delete account")
+	}
+	return nil
+}
+
+func (a *accountSqlite) UpdateRSS(ctx context.Context, id string, url string) error {
+	if err := a.sql.UpdateRSS(ctx, db.UpdateRSSParams{
+		RssUrl: url,
+		ID:     id,
+	}); err != nil {
+		return oops.
+			In("repository").
+			Tags("database", "sqlite").
+			With("account_id", id).
+			Wrapf(err, "update rss")
 	}
 	return nil
 }

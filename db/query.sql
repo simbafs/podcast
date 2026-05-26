@@ -16,5 +16,8 @@ RETURNING *;
 -- name: UpdatePosition :exec
 UPDATE accounts SET current_episode_id = ?, position_sec = ? WHERE id = ?;
 
+-- name: UpdateRSS :exec
+UPDATE accounts SET rss_url = ? WHERE id = ?;
+
 -- name: DeleteAccount :exec
 DELETE FROM accounts WHERE id = ?;

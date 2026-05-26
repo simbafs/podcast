@@ -1,21 +1,22 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
-import { Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, Volume2, Loader2 } from 'lucide-react'
 import type { Episode } from '@/utils/api'
 
 interface AudioPlayerProps {
 	audioUrl: string
 	initialPosition?: number
 	playing?: boolean
+	role: 'master' | 'slave'
 	episodes: Episode[]
 	currentGuid?: string
 	onTimeUpdate?: (pos: number) => void
 	onPlayPause?: (playing: boolean) => void
 	onSeek?: (pos: number) => void
 	onChoose?: (episode: Episode) => void
-	readonly?: boolean
 	seekTo?: number
+	commandPending?: boolean
 }
 
 function useVolume() {
@@ -33,14 +34,15 @@ export default function AudioPlayer({
 	audioUrl,
 	initialPosition = 0,
 	playing: externalPlaying,
+	role,
 	episodes,
 	currentGuid,
 	onTimeUpdate,
 	onPlayPause,
 	onSeek,
 	onChoose,
-	readonly,
 	seekTo,
+	commandPending,
 }: AudioPlayerProps) {
 	const audioRef = useRef<HTMLAudioElement>(null)
 	const [playing, setPlaying] = useState(false)
@@ -51,11 +53,14 @@ export default function AudioPlayer({
 	const playingRef = useRef(false)
 	const lastServerPosRef = useRef(0)
 	const lastServerTimeRef = useRef(0)
+	const positionRef = useRef(initialPosition)
+	const isMaster = role === 'master'
 
 	useEffect(() => {
 		const audio = audioRef.current
 		if (!audio) return
 		setPosition(initialPosition)
+		positionRef.current = initialPosition
 		audio.volume = volume
 		if (!audioUrl) return
 
@@ -76,37 +81,33 @@ export default function AudioPlayer({
 		if (externalPlaying === undefined) return
 		const audio = audioRef.current
 		if (!audio) return
-		if (readonly) {
-			// Slave: UI state only, never touch audio element (browser autoplay policy)
-			setPlaying(externalPlaying)
-		} else {
-			// Master: control audio element
+		if (isMaster) {
 			if (externalPlaying && audio.paused) {
 				const p = audio.play()
 				if (p !== undefined) p.catch(() => {})
-				setPlaying(true)
 			} else if (!externalPlaying && !audio.paused) {
 				audio.pause()
-				setPlaying(false)
 			}
 		}
-	}, [externalPlaying, readonly])
+		setPlaying(externalPlaying)
+	}, [externalPlaying, isMaster])
 
 	// Slave: advance position from last known server position + wall clock time
 	useEffect(() => {
-		if (!readonly || duration === 0) return
+		if (isMaster || duration === 0) return
 		const interval = setInterval(() => {
-			if (playingRef.current) {
+			if (playingRef.current && !seekingRef.current) {
 				const elapsed = (Date.now() - lastServerTimeRef.current) / 1000
 				setPosition(Math.min(lastServerPosRef.current + elapsed, duration))
 			}
 		}, 250)
 		return () => clearInterval(interval)
-	}, [readonly, duration])
+	}, [isMaster, duration])
 
 	useEffect(() => {
 		if (seekTo === undefined) return
-		setPosition(seekTo)
+		setPosition(seekTo) // eslint-disable-line react-hooks/set-state-in-effect
+		positionRef.current = seekTo
 		lastServerPosRef.current = seekTo
 		lastServerTimeRef.current = Date.now()
 		const audio = audioRef.current
@@ -120,48 +121,65 @@ export default function AudioPlayer({
 	const hasNext = currentIndex < episodes.length - 1
 
 	const handlePrev = useCallback(() => {
-		if (!hasPrev || readonly || !onChoose) return
+		if (!hasPrev || !onChoose) return
 		onChoose(episodes[currentIndex - 1])
-	}, [hasPrev, readonly, onChoose, episodes, currentIndex])
+	}, [hasPrev, onChoose, episodes, currentIndex])
 
 	const handleNext = useCallback(() => {
-		if (!hasNext || readonly || !onChoose) return
+		if (!hasNext || !onChoose) return
 		onChoose(episodes[currentIndex + 1])
-	}, [hasNext, readonly, onChoose, episodes, currentIndex])
+	}, [hasNext, onChoose, episodes, currentIndex])
 
 	const handleTimeUpdate = useCallback(() => {
 		if (seekingRef.current) return
 		const audio = audioRef.current
 		if (!audio) return
 		setPosition(audio.currentTime)
+		positionRef.current = audio.currentTime
 		onTimeUpdate?.(audio.currentTime)
 	}, [onTimeUpdate])
 
 	const handlePlayPause = useCallback(() => {
 		const audio = audioRef.current
-		if (!audio || readonly) return
-		if (audio.paused) {
-			audio.play()
-			setPlaying(true)
-			onPlayPause?.(true)
+		if (!audio) return
+		if (isMaster) {
+			// Master: control audio element directly
+			if (audio.paused) {
+				audio.play()
+				setPlaying(true)
+				onPlayPause?.(true)
+			} else {
+				audio.pause()
+				setPlaying(false)
+				onPlayPause?.(false)
+			}
 		} else {
-			audio.pause()
-			setPlaying(false)
-			onPlayPause?.(false)
+			// Slave: send command, parent will handle state
+			if (playingRef.current) {
+				onPlayPause?.(false)
+			} else {
+				onPlayPause?.(true)
+			}
 		}
-	}, [onPlayPause, readonly])
+	}, [onPlayPause, isMaster])
 
 	const handleSeek = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
-			if (readonly) return
 			const pos = Number(e.target.value)
 			seekingRef.current = true
 			setPosition(pos)
-			if (audioRef.current) audioRef.current.currentTime = pos
-			onSeek?.(pos)
+			positionRef.current = pos
+			if (isMaster && audioRef.current) {
+				audioRef.current.currentTime = pos
+			}
 		},
-		[onSeek, readonly],
+		[isMaster],
 	)
+
+	const handleSeekEnd = useCallback(() => {
+		seekingRef.current = false
+		onSeek?.(positionRef.current)
+	}, [onSeek])
 
 	const handleVolume = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
@@ -182,11 +200,6 @@ export default function AudioPlayer({
 					<p className="truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">
 						{currentEpisode.title}
 					</p>
-					{readonly && (
-						<span className="shrink-0 rounded-full border border-amber-200 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:border-amber-800 dark:text-amber-400">
-							read-only
-						</span>
-					)}
 				</div>
 			)}
 
@@ -196,9 +209,7 @@ export default function AudioPlayer({
 					{formatTime(position)}
 				</span>
 				<div className="relative flex-1">
-					{/* Track background */}
 					<div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-					{/* Track fill */}
 					<div
 						className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-gradient-to-r from-teal-500 to-teal-400 dark:from-teal-600 dark:to-teal-500"
 						style={{ width: `${progressPct}%` }}
@@ -209,9 +220,9 @@ export default function AudioPlayer({
 						max={duration || 0}
 						value={position}
 						onChange={handleSeek}
-						onMouseUp={() => (seekingRef.current = false)}
-						onTouchEnd={() => (seekingRef.current = false)}
-						disabled={readonly}
+						onMouseUp={handleSeekEnd}
+						onTouchEnd={handleSeekEnd}
+						disabled={!audioUrl}
 						aria-label="Seek position"
 						className="relative z-10 h-4 w-full cursor-pointer opacity-0"
 					/>
@@ -227,7 +238,7 @@ export default function AudioPlayer({
 					<button
 						type="button"
 						onClick={handlePrev}
-						disabled={!hasPrev || readonly}
+						disabled={!hasPrev}
 						aria-label="Previous episode"
 						className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
 					>
@@ -241,7 +252,9 @@ export default function AudioPlayer({
 						aria-label={playing ? 'Pause' : 'Play'}
 						className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-600 text-white shadow-sm shadow-teal-200 hover:bg-teal-500 active:scale-95 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 dark:shadow-teal-900 dark:focus-visible:ring-offset-zinc-900"
 					>
-						{playing ? (
+						{commandPending ? (
+							<Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+						) : playing ? (
 							<Pause className="h-5 w-5" aria-hidden="true" />
 						) : (
 							<Play className="ml-0.5 h-5 w-5" aria-hidden="true" />
@@ -251,7 +264,7 @@ export default function AudioPlayer({
 					<button
 						type="button"
 						onClick={handleNext}
-						disabled={!hasNext || readonly}
+						disabled={!hasNext}
 						aria-label="Next episode"
 						className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
 					>

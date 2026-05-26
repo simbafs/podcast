@@ -13,7 +13,7 @@ import ShareDialog from '@/components/ShareDialog'
 
 export default function PlayerPage() {
 	const { accountId, account, loading, create, join, update, logout } = useAccount()
-	const { role, state, connected, send } = useWebSocket(
+	const { role, state, connected, send, command, clearCommand } = useWebSocket(
 		loading || !accountId ? undefined : accountId,
 	)
 
@@ -22,7 +22,10 @@ export default function PlayerPage() {
 	const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null)
 	const [syncPosition, setSyncPosition] = useState(0)
 	const [syncPlaying, setSyncPlaying] = useState<boolean | undefined>(undefined)
+	const [commandPending, setCommandPending] = useState(false)
 	const lastUpdateRef = useRef(0)
+	const latestPositionRef = useRef(0)
+	const currentGuidRef = useRef<string | undefined>(undefined)
 
 	// RSS & sort state
 	const [rssUrl, setRssUrl] = useState('')
@@ -31,7 +34,7 @@ export default function PlayerPage() {
 
 	useEffect(() => {
 		if (!account) return
-		setRssUrl(account.rss_url)
+		setRssUrl(account.rss_url) // eslint-disable-line react-hooks/set-state-in-effect
 		setOrderDir(account.order_dir)
 		setSyncPosition(account.position_sec)
 	}, [account])
@@ -49,7 +52,7 @@ export default function PlayerPage() {
 	}, [accountId])
 
 	useEffect(() => {
-		if (accountId) loadEpisodes()
+		if (accountId) loadEpisodes() // eslint-disable-line react-hooks/set-state-in-effect
 	}, [accountId, loadEpisodes])
 
 	// Sorted episodes
@@ -57,38 +60,155 @@ export default function PlayerPage() {
 		return sortEpisodes(episodes, orderDir)
 	}, [episodes, orderDir])
 
+	// Handle relayed commands (master acts on them)
+	useEffect(() => {
+		if (!command) return
+
+		switch (command.type) {
+			case 'play':
+				if (role === 'master') setSyncPlaying(true) // eslint-disable-line react-hooks/set-state-in-effect
+				break
+			case 'pause':
+				if (role === 'master') setSyncPlaying(false) // eslint-disable-line react-hooks/set-state-in-effect
+				break
+			case 'seek':
+				if (role === 'master' && command.position_sec !== undefined) setSyncPosition(command.position_sec)
+				break
+			case 'choose':
+				if (command.episode_id) {
+					const ep = episodes.find(e => e.guid === command.episode_id)
+					if (ep) {
+						setCurrentEpisode(ep)
+						currentGuidRef.current = ep.guid
+						if (role === 'master') setSyncPosition(0)
+					}
+				}
+				break
+			case 'rss':
+				if (command.url !== undefined) {
+					setRssUrl(command.url)
+					loadEpisodes()
+				}
+				break
+		}
+
+		clearCommand()
+	}, [command, role, episodes, clearCommand, loadEpisodes])
+
 	// Sync state from WebSocket
 	useEffect(() => {
 		if (state.episode_id) {
 			const ep = episodes.find(e => e.guid === state.episode_id)
-			if (ep) setCurrentEpisode(ep)
+			if (ep) {
+				setCurrentEpisode(ep) // eslint-disable-line react-hooks/set-state-in-effect
+				currentGuidRef.current = ep.guid
+			}
 		}
-		// Only overwrite position/playing when the server has real state
 		if (state.episode_id) {
-			if (state.position_sec !== undefined) setSyncPosition(state.position_sec)
-			if (state.playing !== undefined) setSyncPlaying(state.playing)
+			if (state.position_sec !== undefined) {
+				setSyncPosition(state.position_sec) // eslint-disable-line react-hooks/set-state-in-effect
+				latestPositionRef.current = state.position_sec
+			}
+			if (state.playing !== undefined) {
+				setSyncPlaying(state.playing) // eslint-disable-line react-hooks/set-state-in-effect
+				setCommandPending(false) // eslint-disable-line react-hooks/set-state-in-effect
+			}
 		}
 	}, [state, episodes])
 
-	// Save RSS URL
+	// Master: send state on any user action with immediate effect
+	const handlePlayPause = useCallback(
+		(playing: boolean) => {
+			if (role === 'master') {
+				setSyncPlaying(playing)
+				send({
+					type: 'state',
+					episode_id: currentGuidRef.current,
+					position_sec: latestPositionRef.current,
+					playing,
+				})
+			} else {
+				setCommandPending(true)
+				send({ type: playing ? 'play' : 'pause' })
+			}
+		},
+		[role, send],
+	)
+
+	const handleSeek = useCallback(
+		(pos: number) => {
+			latestPositionRef.current = pos
+			if (role === 'master') {
+				setSyncPosition(pos)
+				send({
+					type: 'state',
+					episode_id: currentGuidRef.current,
+					position_sec: pos,
+					playing: syncPlaying,
+				})
+			} else {
+				setCommandPending(true)
+				send({ type: 'seek', position_sec: pos })
+			}
+		},
+		[role, send, syncPlaying],
+	)
+
+	const handleChoose = useCallback(
+		(ep: Episode) => {
+			setCurrentEpisode(ep)
+			currentGuidRef.current = ep.guid
+			if (role === 'master') {
+				setSyncPosition(0)
+				latestPositionRef.current = 0
+				send({
+					type: 'state',
+					episode_id: ep.guid,
+					position_sec: 0,
+					playing: true,
+				})
+			} else {
+				setSyncPosition(0)
+				setCommandPending(true)
+				send({ type: 'choose', episode_id: ep.guid })
+			}
+		},
+		[role, send],
+	)
+
+	// Periodic position sync (master only, rate-limited to 5s)
+	const handleTimeUpdate = useCallback(
+		(pos: number) => {
+			if (role !== 'master') return
+			latestPositionRef.current = pos
+			if (Date.now() - lastUpdateRef.current < 5000) return
+			lastUpdateRef.current = Date.now()
+			send({
+				type: 'state',
+				episode_id: currentGuidRef.current,
+				position_sec: pos,
+				playing: syncPlaying,
+			})
+		},
+		[role, send, syncPlaying],
+	)
+
+	// Save RSS URL via WebSocket
 	const handleSaveRss = useCallback(
 		async (e: React.FormEvent) => {
 			e.preventDefault()
 			if (!rssUrl.trim()) return
 			setSavingRss(true)
-			try {
-				await update({ rss_url: rssUrl.trim() })
-				await loadEpisodes()
-			} catch {
-				/* ignore */
-			} finally {
-				setSavingRss(false)
-			}
+			send({ type: 'rss', url: rssUrl.trim() })
+			// Let server persist before reloading episodes
+			await new Promise(r => setTimeout(r, 100))
+			await loadEpisodes()
+			setSavingRss(false)
 		},
-		[rssUrl, update, loadEpisodes],
+		[rssUrl, send, loadEpisodes],
 	)
 
-	// Toggle sort order
+	// Toggle sort order (REST — no real-time sync needed)
 	const toggleOrder = useCallback(async () => {
 		const next = orderDir === 'old-to-new' ? 'new-to-old' : 'old-to-new'
 		setOrderDir(next)
@@ -98,43 +218,6 @@ export default function PlayerPage() {
 			/* ignore */
 		}
 	}, [orderDir, update])
-
-	// WebSocket callbacks
-	const handleTimeUpdate = useCallback(
-		(pos: number) => {
-			if (role !== 'master') return
-			if (Date.now() - lastUpdateRef.current < 5000) return
-			lastUpdateRef.current = Date.now()
-			send({
-				type: 'update',
-				episode_id: state.episode_id || currentEpisode?.guid,
-				position_sec: pos,
-			})
-		},
-		[role, send, state.episode_id, currentEpisode],
-	)
-
-	const handlePlayPause = useCallback(
-		(playing: boolean) => {
-			send({ type: playing ? 'play' : 'stop' })
-		},
-		[send],
-	)
-
-	const handleSeek = useCallback(
-		(pos: number) => {
-			send({ type: 'seek', position_sec: pos })
-		},
-		[send],
-	)
-
-	const handleChoose = useCallback(
-		(ep: Episode) => {
-			setCurrentEpisode(ep)
-			send({ type: 'choose', episode_id: ep.guid })
-		},
-		[send],
-	)
 
 	const handleTakeover = useCallback(() => {
 		send({ type: 'takeover' })
@@ -148,7 +231,6 @@ export default function PlayerPage() {
 		setRssUrl('')
 	}, [logout])
 
-	// Copy account ID to clipboard
 	const copyId = useCallback(() => {
 		if (accountId) navigator.clipboard.writeText(accountId)
 	}, [accountId])
@@ -156,7 +238,6 @@ export default function PlayerPage() {
 	const [shareOpen, setShareOpen] = useState(false)
 	const showAccountDialog = !loading && !accountId && !account
 	const audioUrl = currentEpisode?.audio_url || ''
-	const readonly = role !== 'master'
 
 	// Loading skeleton
 	if (loading) {
@@ -287,15 +368,16 @@ export default function PlayerPage() {
 					<AudioPlayer
 						audioUrl={audioUrl}
 						initialPosition={syncPosition}
-						playing={readonly ? syncPlaying : undefined}
-						seekTo={readonly ? syncPosition : undefined}
+						playing={syncPlaying}
+						role={role === 'master' ? 'master' : 'slave'}
+						seekTo={syncPosition}
 						episodes={sortedEpisodes}
 						currentGuid={currentEpisode?.guid}
 						onTimeUpdate={handleTimeUpdate}
 						onPlayPause={handlePlayPause}
 						onSeek={handleSeek}
 						onChoose={handleChoose}
-						readonly={readonly}
+						commandPending={commandPending}
 					/>
 				</div>
 			)}
@@ -322,7 +404,6 @@ function SkeletonBar({ className }: { className?: string }) {
 function LoadingSkeleton() {
 	return (
 		<div className="mx-auto flex h-dvh max-w-2xl flex-col overflow-hidden">
-			{/* Utility bar skeleton */}
 			<div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
 				<SkeletonBar className="h-5 w-20" />
 				<div className="flex items-center gap-2">
@@ -331,7 +412,6 @@ function LoadingSkeleton() {
 				</div>
 			</div>
 
-			{/* RSS control skeleton */}
 			<div className="shrink-0 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
 				<div className="flex gap-2">
 					<SkeletonBar className="h-11 flex-1 rounded-xl" />
@@ -340,7 +420,6 @@ function LoadingSkeleton() {
 				<SkeletonBar className="mt-2 h-5 w-32 rounded-full" />
 			</div>
 
-			{/* Episode list skeleton */}
 			<div className="flex-1 divide-y divide-zinc-100 px-4 py-4 dark:divide-zinc-800">
 				{[...Array(5)].map((_, i) => (
 					<div key={i} className="flex items-start gap-3 py-3">
@@ -354,7 +433,6 @@ function LoadingSkeleton() {
 				))}
 			</div>
 
-			{/* Audio player skeleton */}
 			<div className="border-t border-zinc-200 px-4 pb-4 pt-3 dark:border-zinc-800">
 				<SkeletonBar className="mb-2 h-3 w-1/2" />
 				<div className="mb-2 flex items-center gap-2">

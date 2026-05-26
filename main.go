@@ -76,10 +76,6 @@ func run(addr, devProxy string) error {
 	<-sigCh
 	signal.Stop(sigCh)
 
-	if mgr, err := do.Invoke[*session.Manager](i); err == nil {
-		mgr.Stop()
-	}
-
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)

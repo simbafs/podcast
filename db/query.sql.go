@@ -103,3 +103,17 @@ func (q *Queries) UpdatePosition(ctx context.Context, arg UpdatePositionParams) 
 	_, err := q.db.ExecContext(ctx, updatePosition, arg.CurrentEpisodeID, arg.PositionSec, arg.ID)
 	return err
 }
+
+const updateRSS = `-- name: UpdateRSS :exec
+UPDATE accounts SET rss_url = ? WHERE id = ?
+`
+
+type UpdateRSSParams struct {
+	RssUrl string
+	ID     string
+}
+
+func (q *Queries) UpdateRSS(ctx context.Context, arg UpdateRSSParams) error {
+	_, err := q.db.ExecContext(ctx, updateRSS, arg.RssUrl, arg.ID)
+	return err
+}

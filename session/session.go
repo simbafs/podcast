@@ -2,15 +2,12 @@ package session
 
 import (
 	"context"
-	"log/slog"
 	"sync"
-	"time"
 
 	"podcast/repository"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/samber/oops"
 )
 
 type Role int
@@ -41,13 +38,15 @@ type State struct {
 	EpisodeID string
 	Position  float64
 	Playing   bool
-	Dirty     bool
+	RSSURL    string
 }
 
 type ClientMessage struct {
 	Type      string  `json:"type"`
 	EpisodeID string  `json:"episode_id,omitempty"`
 	Position  float64 `json:"position_sec,omitempty"`
+	Playing   *bool   `json:"playing,omitempty"`
+	URL       string  `json:"url,omitempty"`
 }
 
 type ServerMessage struct {
@@ -57,6 +56,7 @@ type ServerMessage struct {
 	Position  float64 `json:"position_sec,omitempty"`
 	Playing   *bool   `json:"playing,omitempty"`
 	Role      string  `json:"role,omitempty"`
+	URL       string  `json:"url,omitempty"`
 }
 
 type Manager struct {
@@ -64,28 +64,14 @@ type Manager struct {
 	sessions map[string][]*Session
 	states   map[string]*State
 	repo     repository.Account
-	stopCh   chan struct{}
-	doneCh   chan struct{}
-	stopOnce sync.Once
 }
 
 func NewManager(repo repository.Account) *Manager {
-	m := &Manager{
+	return &Manager{
 		sessions: make(map[string][]*Session),
 		states:   make(map[string]*State),
 		repo:     repo,
-		stopCh:   make(chan struct{}),
-		doneCh:   make(chan struct{}),
 	}
-	go m.flushLoopGuard()
-	return m
-}
-
-func (m *Manager) Stop() {
-	m.stopOnce.Do(func() {
-		close(m.stopCh)
-		<-m.doneCh // wait for final flush to complete
-	})
 }
 
 func (m *Manager) Connect(accountID string, conn *websocket.Conn) *Session {
@@ -124,7 +110,6 @@ func (m *Manager) Disconnect(accountID string, sessionID string) {
 		}
 	}
 
-	// If master disconnected, promote oldest slave
 	if len(m.sessions[accountID]) > 0 {
 		state := m.states[accountID]
 		if state.MasterID == sessionID {
@@ -174,67 +159,32 @@ func (m *Manager) GetState(accountID string) *State {
 	return m.states[accountID]
 }
 
-func (m *Manager) UpdateState(accountID string, episodeID string, position float64, playing bool) {
+// ApplyState persists the master's authoritative state to DB immediately
+// and updates in-memory state.
+func (m *Manager) ApplyState(accountID string, episodeID string, position float64, playing bool) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	state := m.states[accountID]
 	if state == nil {
-		slog.Warn("UpdateState called without Connect", "account_id", accountID)
-		return
+		m.mu.Unlock()
+		return nil
 	}
 	state.EpisodeID = episodeID
 	state.Position = position
 	state.Playing = playing
-	state.Dirty = true
+	m.mu.Unlock()
+
+	ctx := context.Background()
+	return m.repo.UpdatePosition(ctx, accountID, episodeID, position)
 }
 
-func (m *Manager) flushLoopGuard() {
-	if err := oops.In("session-manager").Code("flush_loop_panic").Recover(m.flushLoop); err != nil {
-		slog.Error("flush loop recovered from panic", slog.Any("error", err))
-	}
-}
-
-func (m *Manager) flushLoop() {
-	defer close(m.doneCh)
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-m.stopCh:
-			m.flush()
-			return
-		case <-ticker.C:
-			m.flush()
-		}
-	}
-}
-
-func (m *Manager) flush() {
+// ApplyRSS persists the RSS URL to DB immediately and updates in-memory state.
+func (m *Manager) ApplyRSS(accountID string, url string) error {
 	m.mu.Lock()
-	type dirtyEntry struct {
-		id       string
-		position float64
-		episode  string
-	}
-	var dirty []dirtyEntry
-	for accountID, state := range m.states {
-		if state.Dirty {
-			dirty = append(dirty, dirtyEntry{id: accountID, position: state.Position, episode: state.EpisodeID})
-			state.Dirty = false
-		}
+	if state := m.states[accountID]; state != nil {
+		state.RSSURL = url
 	}
 	m.mu.Unlock()
 
 	ctx := context.Background()
-	for _, d := range dirty {
-		if err := m.repo.UpdatePosition(ctx, d.id, d.episode, d.position); err != nil {
-			slog.Error("flush: update position", "account", d.id, "error", err)
-			m.mu.Lock()
-			if state, ok := m.states[d.id]; ok {
-				state.Dirty = true
-			}
-			m.mu.Unlock()
-		}
-	}
+	return m.repo.UpdateRSS(ctx, accountID, url)
 }

@@ -9,17 +9,27 @@ interface ServerState {
 	master_id?: string
 }
 
+interface Command {
+	type: 'play' | 'pause' | 'seek' | 'choose' | 'rss'
+	episode_id?: string
+	position_sec?: number
+	url?: string
+}
+
 interface UseWSResult {
 	role: 'master' | 'slave' | null
 	state: ServerState
 	connected: boolean
 	send: (msg: object) => void
+	command: Command | null
+	clearCommand: () => void
 }
 
 export function useWebSocket(accountId: string | undefined): UseWSResult {
 	const [role, setRole] = useState<'master' | 'slave' | null>(null)
 	const [state, setState] = useState<ServerState>({})
 	const [connected, setConnected] = useState(false)
+	const [command, setCommand] = useState<Command | null>(null)
 	const wsRef = useRef<WebSocket | null>(null)
 	const reconnectRef = useRef<number>(0)
 
@@ -46,8 +56,8 @@ export function useWebSocket(accountId: string | undefined): UseWSResult {
 						setRole(msg.role)
 					} else if (msg.type === 'state') {
 						setState({ episode_id: msg.episode_id, position_sec: msg.position, playing: msg.playing })
-					} else if (msg.type === 'taken_over') {
-						// state update already handled via individual role messages
+					} else if (['play', 'pause', 'seek', 'choose', 'rss'].includes(msg.type)) {
+						setCommand(msg)
 					}
 				} catch {
 					/* ignore */
@@ -80,5 +90,9 @@ export function useWebSocket(accountId: string | undefined): UseWSResult {
 		}
 	}, [])
 
-	return { role, state, connected, send }
+	const clearCommand = useCallback(() => {
+		setCommand(null)
+	}, [])
+
+	return { role, state, connected, send, command, clearCommand }
 }
