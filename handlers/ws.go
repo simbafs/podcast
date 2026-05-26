@@ -89,13 +89,17 @@ func (h *WSHandler) handleMessage(accountID string, s *session.Session, cm sessi
 		if s.Role != session.RoleMaster {
 			return // slave cannot update
 		}
-		mgr.UpdateState(accountID, cm.EpisodeID, cm.Position, true)
+		playing := true
+		if state != nil {
+			playing = state.Playing
+		}
+		mgr.UpdateState(accountID, cm.EpisodeID, cm.Position, playing)
 		h.broadcast(accountID, session.ServerMessage{
 			Type:      "state",
 			MasterID:  s.ID,
 			EpisodeID: cm.EpisodeID,
 			Position:  cm.Position,
-			Playing:   boolPtr(true),
+			Playing:   boolPtr(playing),
 		}, "")
 
 	case "stop":

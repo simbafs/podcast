@@ -49,6 +49,8 @@ export default function AudioPlayer({
 	const [volume, setVolume] = useVolume()
 	const seekingRef = useRef(false)
 	const playingRef = useRef(false)
+	const lastServerPosRef = useRef(0)
+	const lastServerTimeRef = useRef(0)
 
 	useEffect(() => {
 		const audio = audioRef.current
@@ -90,12 +92,13 @@ export default function AudioPlayer({
 		}
 	}, [externalPlaying, readonly])
 
-	// Slave: advance position every 250ms when playing to keep progress bar smooth
+	// Slave: advance position from last known server position + wall clock time
 	useEffect(() => {
 		if (!readonly || duration === 0) return
 		const interval = setInterval(() => {
 			if (playingRef.current) {
-				setPosition(prev => Math.min(prev + 0.25, duration))
+				const elapsed = (Date.now() - lastServerTimeRef.current) / 1000
+				setPosition(Math.min(lastServerPosRef.current + elapsed, duration))
 			}
 		}, 250)
 		return () => clearInterval(interval)
@@ -104,6 +107,8 @@ export default function AudioPlayer({
 	useEffect(() => {
 		if (seekTo === undefined) return
 		setPosition(seekTo)
+		lastServerPosRef.current = seekTo
+		lastServerTimeRef.current = Date.now()
 		const audio = audioRef.current
 		if (!audio || Math.abs(audio.currentTime - seekTo) < 3) return
 		audio.currentTime = seekTo
