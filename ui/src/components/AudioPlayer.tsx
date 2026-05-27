@@ -54,24 +54,34 @@ export default function AudioPlayer({
 	const lastServerPosRef = useRef(0)
 	const lastServerTimeRef = useRef(0)
 	const positionRef = useRef(initialPosition)
+	const initialPositionRef = useRef(initialPosition)
+	initialPositionRef.current = initialPosition
+	const srcRef = useRef<string | undefined>(undefined)
 	const isMaster = role === 'master'
+
+	useEffect(() => {
+		if (!audioUrl) return
+		const audio = audioRef.current
+		if (!audio) return
+		if (srcRef.current === audioUrl) return
+		srcRef.current = audioUrl
+		audio.src = audioUrl
+	}, [audioUrl])
+
+	const handleLoadedMetadata = useCallback(() => {
+		const audio = audioRef.current
+		if (!audio) return
+		if (initialPositionRef.current > 0) {
+			audio.currentTime = initialPositionRef.current
+		}
+		setDuration(audio.duration || 0)
+	}, [])
 
 	useEffect(() => {
 		const audio = audioRef.current
 		if (!audio) return
-		setPosition(initialPosition)
-		positionRef.current = initialPosition
 		audio.volume = volume
-		if (!audioUrl) return
-
-		audio.src = audioUrl
-		const onLoaded = () => {
-			audio.currentTime = initialPosition
-			setDuration(audio.duration || 0)
-		}
-		audio.addEventListener('loadedmetadata', onLoaded)
-		return () => audio.removeEventListener('loadedmetadata', onLoaded)
-	}, [audioUrl])
+	}, [volume])
 
 	useEffect(() => {
 		playingRef.current = externalPlaying === true
@@ -106,14 +116,15 @@ export default function AudioPlayer({
 
 	useEffect(() => {
 		if (seekTo === undefined) return
-		setPosition(seekTo) // eslint-disable-line react-hooks/set-state-in-effect
+		setPosition(seekTo)
 		positionRef.current = seekTo
 		lastServerPosRef.current = seekTo
 		lastServerTimeRef.current = Date.now()
+		if (!isMaster) return
 		const audio = audioRef.current
-		if (!audio || Math.abs(audio.currentTime - seekTo) < 3) return
+		if (!audio) return
 		audio.currentTime = seekTo
-	}, [seekTo])
+	}, [seekTo, isMaster])
 
 	const currentEpisode = episodes.find(e => e.guid === currentGuid)
 	const currentIndex = episodes.findIndex(e => e.guid === currentGuid)
@@ -169,11 +180,8 @@ export default function AudioPlayer({
 			seekingRef.current = true
 			setPosition(pos)
 			positionRef.current = pos
-			if (isMaster && audioRef.current) {
-				audioRef.current.currentTime = pos
-			}
 		},
-		[isMaster],
+		[],
 	)
 
 	const handleSeekEnd = useCallback(() => {
@@ -309,6 +317,7 @@ export default function AudioPlayer({
 				ref={audioRef}
 				onTimeUpdate={handleTimeUpdate}
 				onEnded={handleNext}
+				onLoadedMetadata={handleLoadedMetadata}
 				preload="metadata"
 			/>
 		</div>
