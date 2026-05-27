@@ -1,0 +1,27 @@
+services:
+    app:
+        build: .
+        network_mode: 'service:tailscale'
+        depends_on:
+            tailscale:
+                condition: service_started
+        restart: unless-stopped
+
+    tailscale:
+        image: tailscale/tailscale:latest
+        hostname: podcast-server
+        restart: unless-stopped
+        network_mode: service:server
+        cap_add:
+            - net_admin
+            - sys_module
+        volumes:
+            - tailscale:/var/lib/tailscale
+        devices:
+            - /dev/net/tun:/dev/net/tun
+        environment:
+            - TS_AUTHKEY=${TS_APIKEY}
+            - TS_STATE_DIR=/var/lib/tailscale
+
+volumes:
+    tailscale-state:
