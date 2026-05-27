@@ -1,12 +1,21 @@
 'use client'
 import { motion } from 'framer-motion'
-import { Play, Pause } from 'lucide-react'
+import { Play, Pause, Download, Loader2, Check } from 'lucide-react'
 import type { Episode } from '@/utils/api'
+
+interface DownloadStatus {
+	guid: string
+	downloaded: boolean
+	progress: number
+}
 
 interface EpisodeListProps {
 	episodes: Episode[]
 	currentId?: string
 	onChoose: (episode: Episode) => void
+	downloadStatuses?: Map<string, DownloadStatus>
+	onDownload?: (episode: Episode) => void
+	onRemoveDownload?: (guid: string) => void
 }
 
 function formatDate(dateStr?: string) {
@@ -27,7 +36,14 @@ const itemVariants = {
 	visible: { opacity: 1, y: 0 },
 }
 
-export default function EpisodeList({ episodes, currentId, onChoose }: EpisodeListProps) {
+export default function EpisodeList({
+	episodes,
+	currentId,
+	onChoose,
+	downloadStatuses,
+	onDownload,
+	onRemoveDownload,
+}: EpisodeListProps) {
 	return (
 		<motion.ul
 			className="divide-y divide-zinc-100 dark:divide-zinc-800"
@@ -86,6 +102,39 @@ export default function EpisodeList({ episodes, currentId, onChoose }: EpisodeLi
 								{ep.duration ? <span> · {ep.duration}</span> : ''}
 							</p>
 						</div>
+
+						{onDownload && (() => {
+							const st = downloadStatuses?.get(ep.guid)
+							if (st?.downloaded || (st?.progress === 1 && !st?.downloaded)) {
+								return (
+									<button
+										type="button"
+										onClick={(e) => { e.stopPropagation(); onRemoveDownload?.(ep.guid) }}
+										aria-label="Remove download"
+										className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-teal-500 hover:bg-red-50 hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:hover:bg-red-950"
+									>
+										<Check className="h-4 w-4" aria-hidden="true" />
+									</button>
+								)
+							}
+							if (st && st.progress > 0 && st.progress < 1) {
+								return (
+									<div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center">
+										<Loader2 className="h-4 w-4 animate-spin text-teal-500" aria-hidden="true" />
+									</div>
+								)
+							}
+							return (
+								<button
+									type="button"
+									onClick={(e) => { e.stopPropagation(); onDownload(ep) }}
+									aria-label="Download episode"
+									className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 opacity-0 hover:bg-teal-50 hover:text-teal-600 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:hover:bg-teal-950 dark:hover:text-teal-400"
+								>
+									<Download className="h-4 w-4" aria-hidden="true" />
+								</button>
+							)
+						})()}
 					</motion.li>
 				)
 			})}

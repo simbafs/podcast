@@ -2,20 +2,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount } from '@/hooks/useAccount'
 import { useWebSocket } from '@/hooks/useWebSocket'
+import { useDownloads } from '@/hooks/useDownloads'
 import { getEpisodes, type Episode } from '@/utils/api'
+import { saveState, loadState, clearState } from '@/utils/offlineState'
+import { getOfflineAudioUrl, revokeOfflineUrl } from '@/utils/offlineAudio'
 import AccountDialog from '@/components/AccountDialog'
 import AudioPlayer from '@/components/AudioPlayer'
 import EpisodeList from '@/components/EpisodeList'
 import SessionIndicator from '@/components/SessionIndicator'
 import ThemeToggle from '@/components/ThemeToggle'
-import { Rss, LogOut, Copy, ArrowUpDown, Share2 } from 'lucide-react'
+import DownloadDialog from '@/components/DownloadDialog'
+import OfflineBanner from '@/components/OfflineBanner'
+import TakeoverPrompt from '@/components/TakeoverPrompt'
 import ShareDialog from '@/components/ShareDialog'
+import { Rss, LogOut, Copy, ArrowUpDown, Share2, Download } from 'lucide-react'
 
 export default function PlayerPage() {
 	const { accountId, account, loading, create, join, update, logout } = useAccount()
-	const { role, state, connected, send, command, clearCommand } = useWebSocket(
+	const { role, state, connected, reconnectCount, send, command, clearCommand } = useWebSocket(
 		loading || !accountId ? undefined : accountId,
 	)
+	const { downloads, statuses: downloadStatuses, download: dlEpisode, remove: removeDownload, refresh: refreshDownloads } = useDownloads()
 
 	const [episodes, setEpisodes] = useState<Episode[]>([])
 	const [feedTitle, setFeedTitle] = useState('')
@@ -23,16 +30,25 @@ export default function PlayerPage() {
 	const [syncPosition, setSyncPosition] = useState(0)
 	const [syncPlaying, setSyncPlaying] = useState<boolean | undefined>(undefined)
 	const [commandPending, setCommandPending] = useState(false)
+	const [offlineAudioUrl, setOfflineAudioUrl] = useState<string | undefined>(undefined)
 	const lastUpdateRef = useRef(0)
 	const latestPositionRef = useRef(0)
 	const currentGuidRef = useRef<string | undefined>(undefined)
 	const syncPlayingRef = useRef(syncPlaying)
 	syncPlayingRef.current = syncPlaying
+	const prevConnectedRef = useRef(false)
+	const prevReconnectRef = useRef(0)
+	const pendingPositionRef = useRef<number | null>(null)
 
 	// RSS & sort state
 	const [rssUrl, setRssUrl] = useState('')
 	const [orderDir, setOrderDir] = useState<string>('old-to-new')
 	const [savingRss, setSavingRss] = useState(false)
+
+	// Dialog & prompt state
+	const [shareOpen, setShareOpen] = useState(false)
+	const [downloadOpen, setDownloadOpen] = useState(false)
+	const [takeoverInfo, setTakeoverInfo] = useState<{ localPosition: number; serverPosition: number } | null>(null)
 
 	useEffect(() => {
 		if (!account) return
@@ -40,6 +56,78 @@ export default function PlayerPage() {
 		setOrderDir(account.order_dir)
 		setSyncPosition(account.position_sec)
 	}, [account])
+
+	// Track connection state changes
+	useEffect(() => {
+		const wasConnected = prevConnectedRef.current
+		prevConnectedRef.current = connected
+
+		// Going offline: save current state
+		if (wasConnected && !connected) {
+			saveState({
+				episodeId: currentGuidRef.current || '',
+				positionSec: latestPositionRef.current,
+				playing: syncPlayingRef.current === true,
+				timestamp: Date.now(),
+			})
+		}
+	}, [connected])
+
+	// Reconnect: restore offline state or prompt takeover
+	useEffect(() => {
+		if (reconnectCount === 0 || reconnectCount === prevReconnectRef.current) return
+		prevReconnectRef.current = reconnectCount
+
+		const saved = loadState()
+		if (!saved) return
+
+		if (role === 'master') {
+			// Still master: restore offline progress
+			send({
+				type: 'state',
+				episode_id: saved.episodeId || currentGuidRef.current,
+				position_sec: saved.positionSec,
+				playing: saved.playing,
+			})
+			clearState()
+		} else if (
+			role === 'slave' &&
+			saved.positionSec > (state.position_sec || 0) + 30
+		) {
+			// Was offline master, now slave with ahead position → prompt takeover
+			setTakeoverInfo({
+				localPosition: saved.positionSec,
+				serverPosition: state.position_sec || 0,
+			})
+		}
+	}, [reconnectCount, role, state.position_sec, send])
+
+	// After takeover: send pending position
+	useEffect(() => {
+		if (role === 'master' && pendingPositionRef.current !== null) {
+			send({
+				type: 'state',
+				episode_id: currentGuidRef.current,
+				position_sec: pendingPositionRef.current,
+				playing: false,
+			})
+			pendingPositionRef.current = null
+		}
+	}, [role, send])
+
+	// Resolve offline audio URL when current episode changes
+	useEffect(() => {
+		if (!currentEpisode) {
+			setOfflineAudioUrl(undefined) // eslint-disable-line react-hooks/set-state-in-effect
+			return
+		}
+		revokeOfflineUrl(currentEpisode.guid)
+		let cancelled = false
+		getOfflineAudioUrl(currentEpisode.audio_url, currentEpisode.guid).then(url => {
+			if (!cancelled) setOfflineAudioUrl(url || undefined) // eslint-disable-line react-hooks/set-state-in-effect
+		})
+		return () => { cancelled = true }
+	}, [currentEpisode])
 
 	// Fetch episodes when account is ready or RSS URL changes
 	const loadEpisodes = useCallback(async () => {
@@ -225,6 +313,13 @@ export default function PlayerPage() {
 		send({ type: 'takeover' })
 	}, [send])
 
+	const handleTakeoverWithPosition = useCallback(() => {
+		if (!takeoverInfo) return
+		pendingPositionRef.current = takeoverInfo.localPosition
+		send({ type: 'takeover' })
+		setTakeoverInfo(null)
+	}, [takeoverInfo, send])
+
 	const handleLogout = useCallback(() => {
 		logout()
 		setEpisodes([])
@@ -237,7 +332,6 @@ export default function PlayerPage() {
 		if (accountId) navigator.clipboard.writeText(accountId)
 	}, [accountId])
 
-	const [shareOpen, setShareOpen] = useState(false)
 	const showAccountDialog = !loading && !accountId && !account
 	const audioUrl = currentEpisode?.audio_url || ''
 
@@ -255,6 +349,22 @@ export default function PlayerPage() {
 					onClose={() => setShareOpen(false)}
 				/>
 			)}
+			{accountId && (
+				<DownloadDialog
+					open={downloadOpen}
+					onClose={() => setDownloadOpen(false)}
+					downloads={downloads}
+					onPlay={handleChoose}
+					onRemove={removeDownload}
+				/>
+			)}
+			<TakeoverPrompt
+				open={takeoverInfo !== null}
+				localPosition={takeoverInfo?.localPosition ?? 0}
+				serverPosition={takeoverInfo?.serverPosition ?? 0}
+				onTakeover={handleTakeoverWithPosition}
+				onDismiss={() => setTakeoverInfo(null)}
+			/>
 			<AccountDialog open={showAccountDialog} onCreate={create} onJoin={join} />
 
 			{!showAccountDialog && (
@@ -275,6 +385,14 @@ export default function PlayerPage() {
 						</button>
 						<div className="flex items-center gap-2">
 							<ThemeToggle />
+							<button
+								type="button"
+								onClick={() => setDownloadOpen(true)}
+								aria-label="Downloads"
+								className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:hover:bg-zinc-800 dark:hover:text-teal-400"
+							>
+								<Download className="h-4 w-4" aria-hidden="true" />
+							</button>
 							<button
 								type="button"
 								onClick={() => setShareOpen(true)}
@@ -298,6 +416,8 @@ export default function PlayerPage() {
 							</button>
 						</div>
 					</div>
+
+					<OfflineBanner show={!connected} />
 
 					{/* RSS control block */}
 					<div className="shrink-0 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
@@ -362,6 +482,9 @@ export default function PlayerPage() {
 								episodes={sortedEpisodes}
 								currentId={currentEpisode?.guid}
 								onChoose={handleChoose}
+								downloadStatuses={downloadStatuses}
+								onDownload={dlEpisode}
+								onRemoveDownload={removeDownload}
 							/>
 						)}
 					</main>
@@ -369,6 +492,7 @@ export default function PlayerPage() {
 					{/* Audio player */}
 					<AudioPlayer
 						audioUrl={audioUrl}
+						offlineAudioUrl={offlineAudioUrl}
 						initialPosition={syncPosition}
 						playing={syncPlaying}
 						role={role === 'master' ? 'master' : 'slave'}

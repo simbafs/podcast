@@ -20,6 +20,7 @@ interface UseWSResult {
 	role: 'master' | 'slave' | null
 	state: ServerState
 	connected: boolean
+	reconnectCount: number
 	send: (msg: object) => void
 	command: Command | null
 	clearCommand: () => void
@@ -30,6 +31,7 @@ export function useWebSocket(accountId: string | undefined): UseWSResult {
 	const [state, setState] = useState<ServerState>({})
 	const [connected, setConnected] = useState(false)
 	const [command, setCommand] = useState<Command | null>(null)
+	const [reconnectCount, setReconnectCount] = useState(0)
 	const wsRef = useRef<WebSocket | null>(null)
 	const reconnectRef = useRef<number>(0)
 
@@ -46,6 +48,7 @@ export function useWebSocket(accountId: string | undefined): UseWSResult {
 
 			ws.onopen = () => {
 				setConnected(true)
+				setReconnectCount(n => n + 1)
 				reconnectRef.current = 0
 			}
 
@@ -97,5 +100,5 @@ export function useWebSocket(accountId: string | undefined): UseWSResult {
 		setCommand(null)
 	}, [])
 
-	return { role, state, connected, send, command, clearCommand }
+	return { role, state, connected, reconnectCount, send, command, clearCommand }
 }

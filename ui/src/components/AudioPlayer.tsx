@@ -6,6 +6,7 @@ import type { Episode } from '@/utils/api'
 
 interface AudioPlayerProps {
 	audioUrl: string
+	offlineAudioUrl?: string
 	initialPosition?: number
 	playing?: boolean
 	role: 'master' | 'slave'
@@ -32,6 +33,7 @@ function formatTime(sec: number): string {
 
 export default function AudioPlayer({
 	audioUrl,
+	offlineAudioUrl,
 	initialPosition = 0,
 	playing: externalPlaying,
 	role,
@@ -70,13 +72,14 @@ export default function AudioPlayer({
 	const isMaster = role === 'master'
 
 	useEffect(() => {
-		if (!audioUrl) return
+		const src = offlineAudioUrl || audioUrl
+		if (!src) return
 		const audio = audioRef.current
 		if (!audio) return
-		if (srcRef.current === audioUrl) return
-		srcRef.current = audioUrl
-		audio.src = audioUrl
-	}, [audioUrl])
+		if (srcRef.current === src) return
+		srcRef.current = src
+		audio.src = src
+	}, [audioUrl, offlineAudioUrl])
 
 	const handleLoadedMetadata = useCallback(() => {
 		const audio = audioRef.current

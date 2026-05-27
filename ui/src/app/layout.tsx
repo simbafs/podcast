@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
+import PwaRegister from '@/components/PwaRegister'
 
 const geistSans = Geist({
 	variable: '--font-geist-sans',
@@ -15,6 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
 	title: 'Podcast Player',
 	description: 'Sync podcast progress across devices',
+	manifest: '/manifest.json',
 }
 
 export const viewport: Viewport = {
@@ -42,6 +44,7 @@ export default function RootLayout({
 					}}
 				/>
 				{children}
+				<PwaRegister />
 			</body>
 		</html>
 	)
