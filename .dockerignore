@@ -1,0 +1,9 @@
+node_modules
+ui/node_modules
+ui/.next
+.git
+.gitignore
+*.md
+*.db
+AGENTS.md
+DESIGN.md

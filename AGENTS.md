@@ -25,6 +25,7 @@ cd ui && pnpm dev
 - Kill backend: `pkill -f podcast-server` (not `lsof -ti:...`)
 - `kama` middleware in `main.go` proxies unknown routes to the Next.js dev server in dev; serves embedded `ui/out/` in production
 - Build frontend before backend: `cd ui && pnpm build && cd .. && go build`
+- Docker build (requires `ui/out/` pre-built): `cd ui && pnpm build && cd .. && docker build -t podcast-server .`
 
 ## Current gotchas
 
