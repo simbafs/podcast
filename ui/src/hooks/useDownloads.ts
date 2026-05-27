@@ -25,6 +25,13 @@ export function useDownloads() {
 			duration: r.episode.duration || '',
 		}))
 		setDownloads(eps)
+		setStatuses(prev => {
+			const next = new Map(prev)
+			for (const r of records) {
+				next.set(r.guid, { guid: r.guid, downloaded: true, progress: 1 })
+			}
+			return next
+		})
 	}, [])
 
 	useEffect(() => { refresh() }, [refresh])
