@@ -54,3 +54,7 @@ export function wsUrl(id: string): string {
 	const wsBase = base.replace(/^http/, 'ws')
 	return `${wsBase}/api/accounts/${encodeURIComponent(id)}/ws`
 }
+
+export function getProxyAudioUrl(audioUrl: string): string {
+	return `${base}/api/proxy/audio?url=${encodeURIComponent(audioUrl)}`
+}

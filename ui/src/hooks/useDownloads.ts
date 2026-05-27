@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { saveDownload, removeDownload, listDownloads, hasDownload } from '@/utils/db'
 import type { Episode } from '@/utils/api'
+import { getProxyAudioUrl } from '@/utils/api'
 
 interface DownloadStatus {
 	guid: string
@@ -35,8 +36,20 @@ export function useDownloads() {
 			return next
 		})
 
+		async function fetchWithFallback(url: string): Promise<Response> {
+			try {
+				const r = await fetch(url)
+				if (!r.ok) throw new Error(`HTTP ${r.status}`)
+				return r
+			} catch {
+				// Direct fetch failed (likely CORS) → retry via server proxy
+				return fetch(getProxyAudioUrl(url))
+			}
+		}
+
 		try {
-			const res = await fetch(episode.audio_url)
+			const res = await fetchWithFallback(episode.audio_url)
+			if (!res.ok) throw new Error(`HTTP ${res.status}`)
 			const reader = res.body?.getReader()
 			if (!reader) throw new Error('No reader')
 

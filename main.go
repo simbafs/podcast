@@ -39,10 +39,12 @@ func run(addr, devProxy string) error {
 	do.Provide(i, handlers.NewAccountHandler)
 	do.Provide(i, handlers.NewFeedHandler)
 	do.Provide(i, handlers.NewWSHandler)
+	do.Provide(i, handlers.NewProxyHandler)
 
 	acc := do.MustInvoke[*handlers.AccountHandler](i)
 	feed := do.MustInvoke[*handlers.FeedHandler](i)
 	ws := do.MustInvoke[*handlers.WSHandler](i)
+	proxy := do.MustInvoke[*handlers.ProxyHandler](i)
 
 	r := gin.Default()
 
@@ -54,6 +56,7 @@ func run(addr, devProxy string) error {
 		api.DELETE("/accounts/:id", acc.Delete)
 		api.GET("/accounts/:id/feed", feed.GetEpisodes)
 		api.GET("/accounts/:id/ws", ws.Handle)
+		api.GET("/proxy/audio", proxy.Audio)
 	}
 
 	k, err := kama.New(uiFs, devProxy, kama.WithStaticPath("ui/out"))
