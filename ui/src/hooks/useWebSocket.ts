@@ -55,7 +55,10 @@ export function useWebSocket(accountId: string | undefined): UseWSResult {
 					if (msg.type === 'role') {
 						setRole(msg.role)
 					} else if (msg.type === 'state') {
-						setState({ episode_id: msg.episode_id, position_sec: msg.position, playing: msg.playing })
+						// WHY: server encodes state position as position_sec; previously read msg.position
+						// Previous behavior: slave never received updated position during master seeks
+						// New behavior: position sync uses msg.position_sec and updates slave UI correctly
+						setState({ episode_id: msg.episode_id, position_sec: msg.position_sec, playing: msg.playing })
 					} else if (['play', 'pause', 'seek', 'choose', 'rss'].includes(msg.type)) {
 						setCommand(msg)
 					}

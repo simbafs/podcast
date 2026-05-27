@@ -57,6 +57,16 @@ export default function AudioPlayer({
 	const initialPositionRef = useRef(initialPosition)
 	initialPositionRef.current = initialPosition
 	const srcRef = useRef<string | undefined>(undefined)
+	const onTimeUpdateRef = useRef(onTimeUpdate)
+	const onSeekRef = useRef(onSeek)
+	const onPlayPauseRef = useRef(onPlayPause)
+	const onChooseRef = useRef(onChoose)
+	const roleRef = useRef(role)
+	onTimeUpdateRef.current = onTimeUpdate
+	onSeekRef.current = onSeek
+	onPlayPauseRef.current = onPlayPause
+	onChooseRef.current = onChoose
+	roleRef.current = role
 	const isMaster = role === 'master'
 
 	useEffect(() => {
@@ -132,14 +142,14 @@ export default function AudioPlayer({
 	const hasNext = currentIndex < episodes.length - 1
 
 	const handlePrev = useCallback(() => {
-		if (!hasPrev || !onChoose) return
-		onChoose(episodes[currentIndex - 1])
-	}, [hasPrev, onChoose, episodes, currentIndex])
+		if (!hasPrev || !onChooseRef.current) return
+		onChooseRef.current(episodes[currentIndex - 1])
+	}, [hasPrev, episodes, currentIndex])
 
 	const handleNext = useCallback(() => {
-		if (!hasNext || !onChoose) return
-		onChoose(episodes[currentIndex + 1])
-	}, [hasNext, onChoose, episodes, currentIndex])
+		if (!hasNext || !onChooseRef.current) return
+		onChooseRef.current(episodes[currentIndex + 1])
+	}, [hasNext, episodes, currentIndex])
 
 	const handleTimeUpdate = useCallback(() => {
 		if (seekingRef.current) return
@@ -147,32 +157,32 @@ export default function AudioPlayer({
 		if (!audio) return
 		setPosition(audio.currentTime)
 		positionRef.current = audio.currentTime
-		onTimeUpdate?.(audio.currentTime)
-	}, [onTimeUpdate])
+		onTimeUpdateRef.current?.(audio.currentTime)
+	}, [])
 
 	const handlePlayPause = useCallback(() => {
 		const audio = audioRef.current
 		if (!audio) return
-		if (isMaster) {
+		if (roleRef.current === 'master') {
 			// Master: control audio element directly
 			if (audio.paused) {
 				audio.play()
 				setPlaying(true)
-				onPlayPause?.(true)
+				onPlayPauseRef.current?.(true)
 			} else {
 				audio.pause()
 				setPlaying(false)
-				onPlayPause?.(false)
+				onPlayPauseRef.current?.(false)
 			}
 		} else {
 			// Slave: send command, parent will handle state
 			if (playingRef.current) {
-				onPlayPause?.(false)
+				onPlayPauseRef.current?.(false)
 			} else {
-				onPlayPause?.(true)
+				onPlayPauseRef.current?.(true)
 			}
 		}
-	}, [onPlayPause, isMaster])
+	}, [])
 
 	const handleSeek = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
@@ -186,8 +196,8 @@ export default function AudioPlayer({
 
 	const handleSeekEnd = useCallback(() => {
 		seekingRef.current = false
-		onSeek?.(positionRef.current)
-	}, [onSeek])
+		onSeekRef.current?.(positionRef.current)
+	}, [])
 
 	const handleVolume = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {

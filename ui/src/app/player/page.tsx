@@ -26,6 +26,8 @@ export default function PlayerPage() {
 	const lastUpdateRef = useRef(0)
 	const latestPositionRef = useRef(0)
 	const currentGuidRef = useRef<string | undefined>(undefined)
+	const syncPlayingRef = useRef(syncPlaying)
+	syncPlayingRef.current = syncPlaying
 
 	// RSS & sort state
 	const [rssUrl, setRssUrl] = useState('')
@@ -144,14 +146,14 @@ export default function PlayerPage() {
 					type: 'state',
 					episode_id: currentGuidRef.current,
 					position_sec: pos,
-					playing: syncPlaying,
+					playing: syncPlayingRef.current,
 				})
 			} else {
 				setCommandPending(true)
 				send({ type: 'seek', position_sec: pos })
 			}
 		},
-		[role, send, syncPlaying],
+		[role, send],
 	)
 
 	const handleChoose = useCallback(
@@ -187,10 +189,10 @@ export default function PlayerPage() {
 				type: 'state',
 				episode_id: currentGuidRef.current,
 				position_sec: pos,
-				playing: syncPlaying,
+				playing: syncPlayingRef.current,
 			})
 		},
-		[role, send, syncPlaying],
+		[role, send],
 	)
 
 	// Save RSS URL via WebSocket
