@@ -23,4 +23,4 @@ services:
             - TS_STATE_DIR=/var/lib/tailscale
 
 volumes:
-    tailscale-state:
+    tailscale:
