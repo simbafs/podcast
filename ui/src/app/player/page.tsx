@@ -22,7 +22,7 @@ export default function PlayerPage() {
 	const { role, state, connected, reconnectCount, send, command, clearCommand } = useWebSocket(
 		loading || !accountId ? undefined : accountId,
 	)
-	const { downloads, statuses: downloadStatuses, download: dlEpisode, remove: removeDownload, refresh: refreshDownloads } = useDownloads()
+	const { downloads, pendingEpisodes, statuses: downloadStatuses, download: dlEpisode, remove: removeDownload, refresh: refreshDownloads } = useDownloads()
 
 	const [episodes, setEpisodes] = useState<Episode[]>([])
 	const [feedTitle, setFeedTitle] = useState('')
@@ -354,6 +354,8 @@ export default function PlayerPage() {
 					open={downloadOpen}
 					onClose={() => setDownloadOpen(false)}
 					downloads={downloads}
+					pendingEpisodes={pendingEpisodes}
+					downloadStatuses={downloadStatuses}
 					onPlay={handleChoose}
 					onRemove={removeDownload}
 				/>

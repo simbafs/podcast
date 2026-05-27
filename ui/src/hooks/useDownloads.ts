@@ -12,6 +12,7 @@ interface DownloadStatus {
 
 export function useDownloads() {
 	const [downloads, setDownloads] = useState<Episode[]>([])
+	const [pendingEpisodes, setPendingEpisodes] = useState<Episode[]>([])
 	const [statuses, setStatuses] = useState<Map<string, DownloadStatus>>(new Map())
 
 	const refresh = useCallback(async () => {
@@ -37,6 +38,7 @@ export function useDownloads() {
 	useEffect(() => { refresh() }, [refresh])
 
 	const download = useCallback(async (episode: Episode) => {
+		setPendingEpisodes(prev => [...prev.filter(e => e.guid !== episode.guid), episode])
 		setStatuses(prev => {
 			const next = new Map(prev)
 			next.set(episode.guid, { guid: episode.guid, downloaded: false, progress: 0 })
@@ -99,8 +101,10 @@ export function useDownloads() {
 				next.set(episode.guid, { guid: episode.guid, downloaded: true, progress: 1 })
 				return next
 			})
+			setPendingEpisodes(prev => prev.filter(e => e.guid !== episode.guid))
 			refresh()
 		} catch {
+			setPendingEpisodes(prev => prev.filter(e => e.guid !== episode.guid))
 			setStatuses(prev => {
 				const next = new Map(prev)
 				next.delete(episode.guid)
@@ -124,5 +128,5 @@ export function useDownloads() {
 		return { guid, downloaded, progress: downloaded ? 1 : 0 }
 	}, [])
 
-	return { downloads, statuses, download, remove, checkStatus, refresh }
+	return { downloads, pendingEpisodes, statuses, download, remove, checkStatus, refresh }
 }

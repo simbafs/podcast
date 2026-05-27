@@ -97,6 +97,25 @@ export default function EpisodeList({
 									{ep.description}
 								</p>
 							)}
+							{(() => {
+								const st = downloadStatuses?.get(ep.guid)
+								if (st && st.progress > 0 && st.progress < 1) {
+									return (
+										<div className="mt-1.5 flex items-center gap-2">
+											<div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+												<div
+													className="h-full rounded-full bg-teal-500 transition-all"
+													style={{ width: `${st.progress * 100}%` }}
+												/>
+											</div>
+											<span className="text-xs tabular-nums text-zinc-400">
+												{Math.round(st.progress * 100)}%
+											</span>
+										</div>
+									)
+								}
+								return null
+							})()}
 							<p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
 								{formatDate(ep.pub_date)}
 								{ep.duration ? <span> · {ep.duration}</span> : ''}
